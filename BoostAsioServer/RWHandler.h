@@ -21,6 +21,8 @@ public:
 	RWHandler(io_service& ios) : m_sock(ios)
 	{
 		offSet = 0;
+		requestUpdate = false;
+		initErrorInfo = false;
 	}
 
 	~RWHandler()
@@ -69,13 +71,18 @@ public:
 			std::string(errorList));
 		m_sock.async_write_some(buffer(str, len),
 			boost::bind(&RWHandler::write_handler, this, placeholders::error),pstr);*/
-		int sendSize = 0;
-		if (strlen(sendData) - offSet < SEND_SIZE)
-			sendSize = strlen(sendData) - offSet;
-		else
-			sendSize = SEND_SIZE;
-		m_sock.async_write_some(buffer(sendData+offSet, sendSize),
-			boost::bind(&RWHandler::write_handler, this, placeholders::error));
+
+		if (initErrorInfo)
+		{
+			int sendSize = 0;
+			if (strlen(sendData) - offSet < SEND_SIZE)
+				sendSize = strlen(sendData) - offSet;
+			else
+				sendSize = SEND_SIZE;
+			m_sock.async_write_some(buffer(sendData + offSet, sendSize),
+				boost::bind(&RWHandler::write_handler, this, placeholders::error));
+		}
+		
 	}
 
 	ip::tcp::socket& GetSocket()
@@ -117,45 +124,45 @@ public:
 	}
 
 private:
-	void do_read_header()
-	{
-		//auto self(boost::shared_from_this());
-		boost::asio::async_read(m_sock,
-			boost::asio::buffer(read_msg.data(), Message::header_length),
-			[this](boost::system::error_code ec, std::size_t /*length*/)
-		{
-			if (!ec && read_msg.decode_header())
-			{
-				do_read_body();
-			}
-			else
-			{
-				HandleError(ec);
-				return;
-			}
-		});
-	}
+	//void do_read_header()
+	//{
+	//	//auto self(boost::shared_from_this());
+	//	boost::asio::async_read(m_sock,
+	//		boost::asio::buffer(read_msg.data(), Message::header_length),
+	//		[this](boost::system::error_code ec, std::size_t /*length*/)
+	//	{
+	//		if (!ec && read_msg.decode_header())
+	//		{
+	//			do_read_body();
+	//		}
+	//		else
+	//		{
+	//			HandleError(ec);
+	//			return;
+	//		}
+	//	});
+	//}
 
-	void do_read_body()
-	{
-		//auto self(shared_from_this());
-		boost::asio::async_read(m_sock,
-			boost::asio::buffer(read_msg.body(), read_msg.body_length()),
-			[this](boost::system::error_code ec, std::size_t /*length*/)
-		{
-			if (!ec)
-			{
-				std::cout << "data" << read_msg.data() << std::endl;
-				//room_.deliver(read_msg_);
-				do_read_header();
-			}
-			else
-			{
-				HandleError(ec);
-				return;
-			}
-		});
-	}
+	//void do_read_body()
+	//{
+	//	//auto self(shared_from_this());
+	//	boost::asio::async_read(m_sock,
+	//		boost::asio::buffer(read_msg.body(), read_msg.body_length()),
+	//		[this](boost::system::error_code ec, std::size_t /*length*/)
+	//	{
+	//		if (!ec)
+	//		{
+	//			std::cout << "data" << read_msg.data() << std::endl;
+	//			//room_.deliver(read_msg_);
+	//			do_read_header();
+	//		}
+	//		else
+	//		{
+	//			HandleError(ec);
+	//			return;
+	//		}
+	//	});
+	//}
 
 	// 异步写操作完成后write_handler触发
 	//void write_handler(const boost::system::error_code& ec, boost::shared_ptr<std::string> str)
@@ -185,30 +192,46 @@ private:
 		}
 		else
 		{
-			if ((offSet + SEND_SIZE) > strlen(sendData))
+			if (initErrorInfo || strcmp(&(*str)[0], "Init") == 0)
 			{
-				std::cout << "发送完成！" << std::endl;
-				boost::system::error_code ec;
-				write(m_sock, buffer("SendFinish", 10), ec);
-				//关闭连接
-				CloseSocket();
-				std::cout << "断开连接" << m_connId << std::endl;
-				if (m_callbackError)
-					m_callbackError(m_connId);
-			}
-			else
-			{
-				if (strcmp(&(*str)[0], "Ok") == 0)
+				if (!initErrorInfo)
 				{
-					std::cout << "接收消息：" << &(*str)[0] << std::endl;
-					offSet = offSet + SEND_SIZE;
+					initErrorInfo = true;
 					HandleWrite();
 				}
 				else
 				{
-					std::cout << "没有接收到返回，重发消息!" << std::endl;
-					HandleWrite();
+					if ((offSet + SEND_SIZE) > strlen(sendData))
+					{
+						std::cout << "发送完成！" << std::endl;
+						boost::system::error_code ec;
+						write(m_sock, buffer("SendFinish", 10), ec);
+						initErrorInfo = false;
+						//关闭连接
+						CloseSocket();
+						std::cout << "断开连接" << m_connId << std::endl;
+						if (m_callbackError)
+							m_callbackError(m_connId);
+					}
+					else
+					{
+						if (strcmp(&(*str)[0], "Ok") == 0)
+						{
+							//std::cout << "接收消息：" << &(*str)[0] << std::endl;
+							offSet = offSet + SEND_SIZE;
+							HandleWrite();
+						}
+						else
+						{
+							std::cout << "没有接收到返回，重发消息!" << std::endl;
+							HandleWrite();
+						}
+					}
 				}
+			}
+			if(strcmp(&(*str)[0], "Update") == 0)
+			{
+				std::cout << "接收消息：" << (*str)[0] << std::endl;
 			}
 		}
 	}
@@ -230,7 +253,10 @@ private:
 	int offSet;
 	char *sendData = NULL;
 
-	char *response_data;
+	string appKey;
+	string start_date;
+	string end_date;
 
-	Message read_msg;
+	bool requestUpdate;
+	bool initErrorInfo;
 };

@@ -49,13 +49,24 @@ using namespace boost::asio;
 using boost::system::error_code;
 using ip::tcp;
 
+//最大连接数
 const int MaxConnectionNum = 65536;
 const int MaxRecvSize = 65536;
 
 struct CHelloWorld_Service
 {
-	CHelloWorld_Service(io_service &iosev):m_iosev(iosev), m_acceptor(iosev, tcp::endpoint(tcp::v4(),80)), m_cnnIdPool(MaxConnectionNum)
+	CHelloWorld_Service(io_service &iosev):m_iosev(iosev)
+		, m_acceptor(iosev, tcp::endpoint(tcp::v4(),80))
+		, m_cnnIdPool(MaxConnectionNum)
+		, m_timer(m_iosev, boost::posix_time::seconds(300))
 	{
+		//此处的http请求应改为每隔一段时间触发
+		httphandler = new MyHttpHandler("9e4b010a0d51f6e020ead6ce37bad33896a00f90", "2016-07-20", "2016-07-26");
+		errorList = httphandler->PostHttpRequest();
+		httphandler->ParseJsonAndInsertToDatabase();
+
+		m_timer.async_wait(boost::bind(&CHelloWorld_Service::wait_handler, this));
+
 		int current = 0;
 		std::generate_n(m_cnnIdPool.begin(), MaxConnectionNum, [&current] {return ++current; });
 	}
@@ -77,14 +88,14 @@ struct CHelloWorld_Service
 			m_handlers.insert(std::make_pair(handler->GetConnId(), handler));
 			std::cout << "current connect count: " << m_handlers.size() << std::endl;
 
-			MyHttpHandler *httphandler = new MyHttpHandler("9e4b010a0d51f6e020ead6ce37bad33896a00f90", "2016-07-20", "2016-07-26");
+			//此处的http请求应改为每隔一段时间触发
+			/*MyHttpHandler *httphandler = new MyHttpHandler("9e4b010a0d51f6e020ead6ce37bad33896a00f90", "2016-05-20", "2016-07-26");
 			string errorList = httphandler->PostHttpRequest();
+			httphandler->ParseJsonAndInsertToDatabase();*/
 
-			//string errorList = "9e4b010a0d51f6e020ead6ce37bad33896a00f90 2016-07-20 2016-07-26";
-
-			//handler->HandleRead();
+			handler->HandleRead();
 			handler->setSendData(errorList.c_str());
-			handler->HandleWrite();
+			//handler->HandleWrite();
 
 			deadline_timer t(m_iosev, boost::posix_time::seconds(3));
 			t.wait();
@@ -169,6 +180,18 @@ struct CHelloWorld_Service
 	}*/
 
 private:
+	//每隔5分钟调用一次http请求更新数据
+	void wait_handler()
+	{
+		//此处的http请求应改为每隔一段时间触发
+		httphandler->setAppKey("9e4b010a0d51f6e020ead6ce37bad33896a00f90");
+		httphandler->setStartDate("2016-07-20");
+		httphandler->setEndDate("2016-07-26");
+		errorList = "";
+		errorList = httphandler->PostHttpRequest();
+		httphandler->ParseJsonAndInsertToDatabase();
+	}
+
 	//检测哪些socket断开
 	void CheckHandlers()
 	{
@@ -180,7 +203,7 @@ private:
 			iter->second->HandleRead();
 		}
 	}
-
+	//发生连接错误时调用
 	void HandleAcpError(std::shared_ptr <RWHandler> eventHanlder, const boost::system::error_code& error)
 	{
 		std::cout << "Error，error reason：" << error.value() << error.message() << std::endl;
@@ -212,7 +235,7 @@ private:
 
 		return handler;
 	}
-
+	//循环使用socket ID
 	void RecyclConnid(int connId)
 	{
 		auto it = m_handlers.find(connId);
@@ -228,11 +251,18 @@ private:
 
 	boost::unordered_map<int, std::shared_ptr<RWHandler>> m_handlers;
 	std::list<int> m_cnnIdPool;
+
+	deadline_timer m_timer;
+	string errorList;
+	MyHttpHandler *httphandler;
 };
+
+
 
 int main()
 {
 	io_service iosev;
+
 	CHelloWorld_Service sev(iosev);
 
 	// 开始等待连接

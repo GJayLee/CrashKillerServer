@@ -5,6 +5,16 @@
 #include <boost\property_tree\json_parser.hpp>
 #include <boost\date_time.hpp>
 
+//连接数据库
+#include<cppconn\driver.h>
+#include<cppconn\exception.h>
+#include <cppconn/resultset.h> 
+#include <cppconn/statement.h>
+#include<mysql_connection.h>
+#include <cppconn/prepared_statement.h>
+
+#define BOOST_SPIRIT_THREADSAFE
+
 using namespace boost::property_tree;
 using namespace boost::gregorian;
 using boost::asio::ip::tcp;
@@ -40,7 +50,8 @@ char* G2U(const char* gb2312)
 	return str;
 }
 
-//从萌友平台获取数据，HTTP请求处理类
+/*从萌友平台获取数据，HTTP请求处理类,
+同时把获取到的数据写入数据库中*/
 class MyHttpHandler
 {
 public:
@@ -68,22 +79,9 @@ public:
 		end_date = date;
 	}
 
-	void writeFile(const char *src, const char *fileName)
-	{
-		std::ofstream out(fileName, std::ios::out);
-		if (!out)
-		{
-			std::cout << "Can not Open this file!" << std::endl;
-			return;
-		}
-		out << src;
-		out << std::endl;
-
-		out.close();
-	}
-	
 	string PostHttpRequest()
 	{
+		errorList = "";
 		GetLoginToken();
 		std::cout << "Get Token finish!" << std::endl;
 		GetErrorList();
@@ -92,7 +90,68 @@ public:
 		return errorList;
 	}
 
+	void ParseJsonAndInsertToDatabase()
+	{
+		//连接数据库
+		sql::Driver *dirver;
+		sql::Connection *con;
+		dirver = get_driver_instance();
+		//连接数据库
+		con = dirver->connect("localhost", "root", "123456");
+		//选择CrashKiller数据库
+		con->setSchema("CrashKiller");
+		
+		sql::Statement *stmt;
+		stmt = con->createStatement();
+		stmt->execute("delete from errorinfo");
+		delete stmt;
+		
+		ptree pt, p1, p2;
+		std::stringstream stream;
+		stream << errorList;
+		read_json<ptree>(stream, pt);
+		int totalCount = pt.get<int>("totalCount");
+		std::cout << "totalCount:" << totalCount << std::endl;
+		p1 = pt.get_child("data");
+		int i = 0;
+		for (ptree::iterator it = p1.begin(); it != p1.end(); ++it)
+		{
+			p2 = it->second;
+			/*std::cout << "context_digest:" << p2.get<string>("context_digest") << std::endl;
+			std::cout << "raw_crash_record_id:" << p2.get<int>("raw_crash_record_id") << std::endl;
+			std::cout << "created_at:" << p2.get<string>("created_at") << std::endl;
+			std::cout << "app_version:" << p2.get<string>("app_version") << std::endl;*/
+			InsertDataToDataBase(con, 
+				i,
+				p2.get<string>("context_digest"), 
+				p2.get<string>("raw_crash_record_id"),
+				p2.get<string>("created_at"),
+				p2.get<string>("app_version"));
+			i++;
+		}
+
+		delete con;
+	}
+
+
 private:
+	//执行插入语句，向数据中插入异常数据信息
+	void InsertDataToDataBase(sql::Connection *con,const int id, const string context, const string raw, const string create, const string app)
+	{
+		sql::PreparedStatement *pstmt;
+		pstmt = con->prepareStatement("INSERT INTO ErrorInfo(ID,context_digest,raw_crash_record_id,created_at,app_version) VALUES(?,?,?,?,?)");
+		char idstr[20] = { 0 };
+		_itoa(id, idstr, 10);
+		pstmt->setString(1, idstr);
+		pstmt->setString(2, context);
+		pstmt->setString(3, raw);
+		pstmt->setString(4, create);
+		pstmt->setString(5, app);
+
+		pstmt->execute();
+
+		delete pstmt;
+	}
 
 	int GetErrorList()
 	{
@@ -280,7 +339,7 @@ private:
 			is.unsetf(std::ios_base::skipws);
 			tokenInfo.append(std::istream_iterator<char>(is), std::istream_iterator<char>());
 
-			ptree pt, p1;
+			ptree pt;
 			std::stringstream stream;
 			stream << tokenInfo;
 			read_json<ptree>(stream, pt);
@@ -300,6 +359,20 @@ private:
 			return -4;
 		}
 		return 0;
+	}
+
+	void writeFile(const char *src, const char *fileName)
+	{
+		std::ofstream out(fileName, std::ios::out);
+		if (!out)
+		{
+			std::cout << "Can not Open this file!" << std::endl;
+			return;
+		}
+		out << src;
+		out << std::endl;
+
+		out.close();
 	}
 
 	string host;
