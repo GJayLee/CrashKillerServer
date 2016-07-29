@@ -71,7 +71,6 @@ struct CHelloWorld_Service
 		//CheckHandlers();
 		std::cout << "Start Listening " << std::endl;
 		std::shared_ptr<RWHandler> handler = CreateHandler();
-
 		m_acceptor.async_accept(handler->GetSocket(), [this, handler](const boost::system::error_code& error)
 		{
 			if (error)
