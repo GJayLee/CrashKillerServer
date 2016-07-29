@@ -1,0 +1,10 @@
+﻿  main.cpp
+  Please define _WIN32_WINNT or _WIN32_WINDOWS appropriately. For example:
+  - add -D_WIN32_WINNT=0x0501 to the compiler command line; or
+  - add _WIN32_WINNT=0x0501 to your project's Preprocessor Definitions.
+  Assuming _WIN32_WINNT=0x0501 (i.e. Windows XP target).
+d:\lee\boost\boost_1_61_0\boost\format\alt_sstream_impl.hpp : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+d:\lee\projects\boostasioserver\boostasioserver\rwhandler.h(54): warning C4101: “e”: 未引用的局部变量
+d:\lee\projects\boostasioserver\boostasioserver\rwhandler.h(164): warning C4018: “>”: 有符号/无符号不匹配
+d:\lee\projects\boostasioserver\boostasioserver\rwhandler.h(180): warning C4018: “>”: 有符号/无符号不匹配
+  BoostAsioServer.vcxproj -> D:\Lee\Projects\BoostAsioServer\Debug\BoostAsioServer.exe
