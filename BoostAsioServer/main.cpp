@@ -58,14 +58,9 @@ struct CHelloWorld_Service
 	CHelloWorld_Service(io_service &iosev):m_iosev(iosev)
 		, m_acceptor(iosev, tcp::endpoint(tcp::v4(),80))
 		, m_cnnIdPool(MaxConnectionNum)
-		, m_timer(m_iosev, boost::posix_time::seconds(300))
+		
 	{
-		//此处的http请求应改为每隔一段时间触发
-		httphandler = new MyHttpHandler("9e4b010a0d51f6e020ead6ce37bad33896a00f90", "2016-07-20", "2016-07-26");
-		errorList = httphandler->PostHttpRequest();
-		httphandler->ParseJsonAndInsertToDatabase();
-
-		m_timer.async_wait(boost::bind(&CHelloWorld_Service::wait_handler, this));
+		
 
 		int current = 0;
 		std::generate_n(m_cnnIdPool.begin(), MaxConnectionNum, [&current] {return ++current; });
@@ -94,7 +89,7 @@ struct CHelloWorld_Service
 			httphandler->ParseJsonAndInsertToDatabase();*/
 
 			handler->HandleRead();
-			handler->setSendData(errorList.c_str());
+			//handler->setSendData(errorList.c_str());
 			//handler->HandleWrite();
 
 			deadline_timer t(m_iosev, boost::posix_time::seconds(3));
@@ -180,17 +175,7 @@ struct CHelloWorld_Service
 	}*/
 
 private:
-	//每隔5分钟调用一次http请求更新数据
-	void wait_handler()
-	{
-		//此处的http请求应改为每隔一段时间触发
-		httphandler->setAppKey("9e4b010a0d51f6e020ead6ce37bad33896a00f90");
-		httphandler->setStartDate("2016-07-20");
-		httphandler->setEndDate("2016-07-26");
-		errorList = "";
-		errorList = httphandler->PostHttpRequest();
-		httphandler->ParseJsonAndInsertToDatabase();
-	}
+	
 
 	//检测哪些socket断开
 	void CheckHandlers()
@@ -252,9 +237,7 @@ private:
 	boost::unordered_map<int, std::shared_ptr<RWHandler>> m_handlers;
 	std::list<int> m_cnnIdPool;
 
-	deadline_timer m_timer;
-	string errorList;
-	MyHttpHandler *httphandler;
+	
 };
 
 
