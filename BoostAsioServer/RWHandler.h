@@ -161,13 +161,13 @@ private:
 	//void write_handler(const boost::system::error_code& ec, boost::shared_ptr<std::string> str)
 	void write_handler(const boost::system::error_code& ec)
 	{
-		if (ec || (offSet + 10)>strlen(sendData))
-			std::cout << "发送失败!" <<
-			std::endl;
+		if (ec)
+		{
+			std::cout << "发送失败!" << std::endl;
+			HandleError(ec);
+		}
 		else
 		{
-			/*std::cout << *str << " 已发送" <<
-			std::endl;*/
 			std::cout << "成功发送！" << std::endl;
 			//接受消息（非阻塞）
 			HandleRead();
@@ -177,7 +177,7 @@ private:
 	//异步读操作完成后read_handler触发
 	void read_handler(const boost::system::error_code& ec, boost::shared_ptr<std::vector<char> > str)
 	{
-		if (ec || (offSet + 10)>strlen(sendData))
+		if (ec)
 		{
 			//std::cout << "没有接收到消息！" << std::endl;
 			HandleError(ec);
@@ -185,9 +185,31 @@ private:
 		}
 		else
 		{
-			std::cout << "接收消息：" << &(*str)[0] << std::endl;
-			offSet = offSet + SEND_SIZE;
-			HandleWrite();
+			if ((offSet + SEND_SIZE) > strlen(sendData))
+			{
+				std::cout << "发送完成！" << std::endl;
+				boost::system::error_code ec;
+				write(m_sock, buffer("SendFinish", 10), ec);
+				//关闭连接
+				CloseSocket();
+				std::cout << "断开连接" << m_connId << std::endl;
+				if (m_callbackError)
+					m_callbackError(m_connId);
+			}
+			else
+			{
+				if (strcmp(&(*str)[0], "Ok") == 0)
+				{
+					std::cout << "接收消息：" << &(*str)[0] << std::endl;
+					offSet = offSet + SEND_SIZE;
+					HandleWrite();
+				}
+				else
+				{
+					std::cout << "没有接收到返回，重发消息!" << std::endl;
+					HandleWrite();
+				}
+			}
 		}
 	}
 
@@ -207,6 +229,8 @@ private:
 	std::function<void(int)> m_callbackError;
 	int offSet;
 	char *sendData = NULL;
+
+	char *response_data;
 
 	Message read_msg;
 };
