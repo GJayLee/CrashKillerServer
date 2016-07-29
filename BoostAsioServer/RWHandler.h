@@ -21,20 +21,14 @@ class RWHandler
 {
 public:
 
-	RWHandler(io_service& ios) : m_sock(ios), m_timer(ios, boost::posix_time::seconds(300))
+	RWHandler(io_service& ios) : m_sock(ios)
 	{
-		//此处的http请求应改为每隔一段时间触发
-		/*std::cout << "Init" << std::endl;
-		httphandler = new MyHttpHandler("9e4b010a0d51f6e020ead6ce37bad33896a00f90", "2016-07-20", "2016-07-26");
-		string errorList = httphandler->PostHttpRequest();
-		setSendData(errorList.c_str());
-		httphandler->ParseJsonAndInsertToDatabase();*/
-
-		//m_timer.async_wait(boost::bind(&RWHandler::wait_handler, this));
-
+		httphandler = new MyHttpHandler();
 		offSet = 0;
-		requestUpdate = false;
 		initErrorInfo = false;
+		appKey = "";
+		start_date = "";
+		end_date = "";
 	}
 
 	~RWHandler()
@@ -119,6 +113,21 @@ public:
 		return m_connId;
 	}
 
+	string GetAppKey()
+	{
+		return appKey;
+	}
+
+	string GetStartDate()
+	{
+		return start_date;
+	}
+
+	string GetEndDate()
+	{
+		return end_date;
+	}
+
 	void setSendData(const char* str)
 	{
 		sendData = new char[strlen(str) + 1];
@@ -173,18 +182,6 @@ private:
 	//		}
 	//	});
 	//}
-
-	//每隔5分钟调用一次http请求更新数据
-	void wait_handler()
-	{
-		//此处的http请求应改为每隔一段时间触发
-		httphandler->setAppKey("9e4b010a0d51f6e020ead6ce37bad33896a00f90");
-		httphandler->setStartDate("2016-07-20");
-		httphandler->setEndDate("2016-07-26");
-		string errorList = httphandler->PostHttpRequest();
-		setSendData(errorList.c_str());
-		httphandler->ParseJsonAndInsertToDatabase();
-	}
 
 	void GetDatabaseData()
 	{
@@ -343,10 +340,7 @@ private:
 	string start_date;
 	string end_date;
 
-	bool requestUpdate;
 	bool initErrorInfo;
 
-	deadline_timer m_timer;
-	string errorList;
 	MyHttpHandler *httphandler;
 };

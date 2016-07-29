@@ -52,15 +52,29 @@ using ip::tcp;
 //最大连接数
 const int MaxConnectionNum = 65536;
 const int MaxRecvSize = 65536;
+//设置服务器更新时间为5分钟
+const int UPDATE_TIME = 300;
+
+//从萌友平台获取异常数据时的默认appKey、start_date和end_date
+string defaultAppKey = "9e4b010a0d51f6e020ead6ce37bad33896a00f90";
+string defaultStartDate = "2016-07-20";
+string defaultEndDate = "2016-07-26";
 
 struct CHelloWorld_Service
 {
 	CHelloWorld_Service(io_service &iosev):m_iosev(iosev)
-		, m_acceptor(iosev, tcp::endpoint(tcp::v4(),80))
+		, m_acceptor(iosev, tcp::endpoint(tcp::v4(),80)), m_timer(iosev, boost::posix_time::seconds(UPDATE_TIME))
 		, m_cnnIdPool(MaxConnectionNum)
 		
 	{
 		
+		/*httphandler = new MyHttpHandler("9e4b010a0d51f6e020ead6ce37bad33896a00f90", "2016-07-20", "2016-07-26");
+		httphandler->PostHttpRequest();
+		httphandler->ParseJsonAndInsertToDatabase();*/
+		
+		httphandler = new MyHttpHandler();
+		//此处的http请求应改为每隔一段时间触发
+		m_timer.async_wait(boost::bind(&CHelloWorld_Service::wait_handler, this));
 
 		int current = 0;
 		std::generate_n(m_cnnIdPool.begin(), MaxConnectionNum, [&current] {return ++current; });
@@ -88,6 +102,10 @@ struct CHelloWorld_Service
 			httphandler->ParseJsonAndInsertToDatabase();*/
 
 			handler->HandleRead();
+			appKey = handler->GetAppKey();
+			start_date = handler->GetStartDate();
+			end_date = handler->GetEndDate();
+
 			//handler->setSendData(errorList.c_str());
 			//handler->HandleWrite();
 
@@ -174,7 +192,26 @@ struct CHelloWorld_Service
 	}*/
 
 private:
-	
+	//每隔5分钟调用一次http请求更新数据
+	void wait_handler()
+	{
+		//如果appkey、start_date和end_date为空，则赋予它们一个默认值进行更新
+		if (appKey == "")
+			appKey = defaultAppKey;
+		if (start_date == "")
+			start_date = defaultStartDate;
+		if (end_date == "")
+			end_date = defaultEndDate;
+		//此处的http请求应改为每隔一段时间触发
+		httphandler->setAppKey(appKey);
+		httphandler->setStartDate(start_date);
+		httphandler->setEndDate(end_date);
+		httphandler->PostHttpRequest();
+		httphandler->ParseJsonAndInsertToDatabase();
+
+		m_timer.expires_at(m_timer.expires_at() + boost::posix_time::seconds(UPDATE_TIME));
+		m_timer.async_wait(boost::bind(&CHelloWorld_Service::wait_handler, this));
+	}
 
 	//检测哪些socket断开
 	void CheckHandlers()
@@ -236,7 +273,13 @@ private:
 	boost::unordered_map<int, std::shared_ptr<RWHandler>> m_handlers;
 	std::list<int> m_cnnIdPool;
 
-	
+	deadline_timer m_timer;
+	string errorList;
+	MyHttpHandler *httphandler;
+
+	string appKey;
+	string start_date;
+	string end_date;
 };
 
 

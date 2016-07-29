@@ -55,6 +55,13 @@ char* G2U(const char* gb2312)
 class MyHttpHandler
 {
 public:
+	MyHttpHandler()
+	{
+		host = "myou.cvte.com";
+		loginPage = "http://myou.cvte.com/api/in/auth/login";
+		data = "{\"email\":\"lindexi@cvte.com\",\"password\":\"11111111\"}";
+		origin = "http://myou.cvte.com";
+	}
 	MyHttpHandler(string a, string s, string e) : appkey(a), start_date(s), end_date(e)
 	{
 		//…Ë÷√Header–≈œ¢
