@@ -15,7 +15,7 @@ using boost::asio::ip::tcp;
 const int MAX_IP_PACK_SIZE = 100;
 const int HEAD_LEN = 1;
 
-const int SEND_SIZE = 100;
+const int SEND_SIZE = 65536;
 
 class RWHandler
 {
@@ -25,6 +25,7 @@ public:
 	{
 		httphandler = new MyHttpHandler();
 		offSet = 0;
+		dataToSendIndex = 0;
 		initErrorInfo = false;
 		appKey = "";
 		start_date = "";
@@ -80,13 +81,31 @@ public:
 
 		if (initErrorInfo)
 		{
-			int sendSize = 0;
+			/*std::stringstream ss;
+			string dataSize;
+			ss << dataInJson[dataToSendIndex].size();
+			ss >> dataSize;
+			string data = dataSize + "+" + dataInJson[dataToSendIndex];*/
+
+			if (dataInJson[dataToSendIndex].size() > SEND_SIZE)
+			{
+				m_sock.async_write_some(buffer(dataInJson[dataToSendIndex].c_str() + offSet, SEND_SIZE),
+					boost::bind(&RWHandler::write_handler, this, placeholders::error));
+			}
+			else
+			{
+				string endStr = "End" + dataInJson[dataToSendIndex];
+				m_sock.async_write_some(buffer(endStr.c_str() + offSet, dataInJson[dataToSendIndex].size() - offSet + 3),
+					boost::bind(&RWHandler::write_handler, this, placeholders::error));
+			}
+
+			/*int sendSize = 0;
 			if (strlen(sendData) - offSet < SEND_SIZE)
 				sendSize = strlen(sendData) - offSet;
 			else
 				sendSize = SEND_SIZE;
 			m_sock.async_write_some(buffer(sendData + offSet, sendSize),
-				boost::bind(&RWHandler::write_handler, this, placeholders::error));
+				boost::bind(&RWHandler::write_handler, this, placeholders::error));*/
 		}
 		
 	}
@@ -183,6 +202,56 @@ private:
 	//	});
 	//}
 
+	void TransferDataToJson()
+	{
+		dataInJson.clear();
+		sql::Driver *dirver;
+		sql::Connection *con;
+		sql::Statement *stmt;
+		sql::ResultSet *res;
+		dirver = get_driver_instance();
+		//连接数据库
+		con = dirver->connect("localhost", "root", "123456");
+		//选择mydata数据库
+		con->setSchema("CrashKiller");
+		//con->setClientOption("characterSetResults", "utf8");
+		stmt = con->createStatement();
+
+		string result = "";
+		//从errorinfo表中获取所有信息
+		res = stmt->executeQuery("select * from errorinfo");
+		
+		//循环遍历
+		while (res->next())
+		{
+			std::stringstream stream;
+			ptree pt, pt1, pt2;
+			int id = 1;
+			pt1.put<int>("id", id);
+			pt1.put("crash_id", res->getString("crash_id"));
+			pt1.put("fixed", res->getString("fixed"));
+			pt1.put("app_version", res->getString("app_version"));
+			pt1.put("first_crash_date_time", res->getString("first_crash_date_time"));
+			pt1.put("last_crash_date_time", res->getString("last_crash_date_time"));
+			pt1.put("crash_context_digest", res->getString("crash_context_digest"));
+			pt1.put("crash_context", res->getString("crash_context"));
+
+			pt2.push_back(make_pair("", pt1));
+			pt.put_child("data", pt2);
+			write_json(stream, pt);
+			dataInJson.push_back(stream.str());
+		}
+
+		writeFile(dataInJson, "dataJson.txt");
+
+		//setSendData(result.c_str());
+
+		//清理
+		delete res;
+		delete stmt;
+		delete con;
+	}
+
 	void GetDatabaseData()
 	{
 		sql::Driver *dirver;
@@ -206,9 +275,10 @@ private:
 		{
 			//输出，id，name，age,work,others字段的信息
 			//cout << res->getString("name") << " | " << res->getInt("age") << endl;
-			result = result + res->getString("ID") + res->getString("context_digest") 
-				+ res->getString("raw_crash_record_id") + res->getString("created_at")
-				+ res->getString("app_version");
+			result = result + res->getString("ID") + res->getString("crash_id") 
+				+ res->getString("fixed") + res->getString("app_version")
+				+ res->getString("first_crash_date_time") + res->getString("crash_context_digest")
+				+ res->getString("crash_context");
 		}
 
 		setSendData(result.c_str());
@@ -230,7 +300,7 @@ private:
 		}
 		else
 		{
-			std::cout << "成功发送！" << std::endl;
+			//std::cout << "成功发送！" << std::endl;
 			//接受消息（非阻塞）
 			HandleRead();
 		}
@@ -252,22 +322,36 @@ private:
 				if (!initErrorInfo)
 				{
 					initErrorInfo = true;
-					GetDatabaseData();
+					//GetDatabaseData();
+					TransferDataToJson();
+					dataToSendIndex = 0;
+					offSet = 0;
 					HandleWrite();
 				}
 				else
 				{
-					if ((offSet + SEND_SIZE) > strlen(sendData))
+					//if ((offSet + SEND_SIZE) > strlen(sendData))
+					if ((offSet + SEND_SIZE) > dataInJson[dataToSendIndex].size())
 					{
-						std::cout << "发送完成！" << std::endl;
-						boost::system::error_code ec;
-						write(m_sock, buffer("SendFinish", 10), ec);
-						initErrorInfo = false;
-						//关闭连接
-						CloseSocket();
-						std::cout << "断开连接" << m_connId << std::endl;
-						if (m_callbackError)
-							m_callbackError(m_connId);
+						std::cout << dataToSendIndex << "发送完成！" << std::endl;
+						++dataToSendIndex;
+						//判断是否还有下一条异常，如果有则继续发送，无则关闭连接
+						if (dataToSendIndex < dataInJson.size())
+						{
+							offSet = 0;
+							HandleWrite();
+						}
+						else
+						{
+							boost::system::error_code ec;
+							write(m_sock, buffer("SendFinish", 10), ec);
+							initErrorInfo = false;
+							//关闭连接
+							CloseSocket();
+							std::cout << "断开连接" << m_connId << std::endl;
+							if (m_callbackError)
+								m_callbackError(m_connId);
+						}
 					}
 					else
 					{
@@ -287,6 +371,8 @@ private:
 			}
 			else
 			{
+				std::cout << "接收消息：" << &(*str)[0] << std::endl;
+				HandleRead();
 				char command[7] = { 0 };
 				char msg[100] = { 0 };
 				for (int i = 0; i < 6; i++)
@@ -328,6 +414,24 @@ private:
 			m_callbackError(m_connId);
 	}
 
+	//把数据写入到文件方便测试
+	void writeFile(std::vector<string> res, const char *fileName)
+	{
+		std::ofstream out(fileName, std::ios::out);
+		if (!out)
+		{
+			std::cout << "Can not Open this file!" << std::endl;
+			return;
+		}
+		for (int i = 0; i < res.size(); i++)
+		{
+			out << res[i];
+			out << std::endl;
+		}
+
+		out.close();
+	}
+
 private:
 	ip::tcp::socket m_sock;
 	std::array<char, MAX_IP_PACK_SIZE> m_buff;
@@ -335,6 +439,9 @@ private:
 	std::function<void(int)> m_callbackError;
 	int offSet;
 	char *sendData = NULL;
+
+	std::vector<string> dataInJson;
+	int dataToSendIndex;
 
 	string appKey;
 	string start_date;

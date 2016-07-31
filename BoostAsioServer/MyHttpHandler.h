@@ -113,29 +113,40 @@ public:
 		stmt->execute("delete from errorinfo");
 		delete stmt;
 		
-		ptree pt, p1, p2;
+		ptree pt, p1;
 		std::stringstream stream;
 		stream << errorList;
 		read_json<ptree>(stream, pt);
-		int totalCount = pt.get<int>("totalCount");
-		std::cout << "totalCount:" << totalCount << std::endl;
-		p1 = pt.get_child("data");
+		
 		int i = 0;
-		for (ptree::iterator it = p1.begin(); it != p1.end(); ++it)
+		for (ptree::iterator it = pt.begin(); it != pt.end(); ++it)
 		{
-			p2 = it->second;
-			/*std::cout << "context_digest:" << p2.get<string>("context_digest") << std::endl;
-			std::cout << "raw_crash_record_id:" << p2.get<int>("raw_crash_record_id") << std::endl;
-			std::cout << "created_at:" << p2.get<string>("created_at") << std::endl;
-			std::cout << "app_version:" << p2.get<string>("app_version") << std::endl;*/
-			InsertDataToDataBase(con, 
-				i,
-				p2.get<string>("context_digest"), 
-				p2.get<string>("raw_crash_record_id"),
-				p2.get<string>("created_at"),
-				p2.get<string>("app_version"));
+			p1 = it->second;
+			//std::cout << "app_version:" << p1.get<string>("app_version") << std::endl;
+			InsertDataToDataBase(con, p1.get<string>("crash_id"), p1.get<string>("fixed"),
+				p1.get<string>("app_version"), p1.get<string>("first_crash_date_time"),
+				p1.get<string>("last_crash_date_time"), p1.get<string>("crash_context_digest"), p1.get<string>("crash_context"));
 			i++;
 		}
+
+		//int totalCount = pt.get<int>("totalCount");
+		//std::cout << "totalCount:" << totalCount << std::endl;
+		//p1 = pt.get_child("data");
+		//for (ptree::iterator it = p1.begin(); it != p1.end(); ++it)
+		//{
+		//	p2 = it->second;
+		//	std::cout << "context_digest:" << p2.get<string>("context_digest") << std::endl;
+		//	std::cout << "raw_crash_record_id:" << p2.get<int>("raw_crash_record_id") << std::endl;
+		//	std::cout << "created_at:" << p2.get<string>("created_at") << std::endl;
+		//	std::cout << "app_version:" << p2.get<string>("app_version") << std::endl;
+		//	/*InsertDataToDataBase(con, 
+		//		i,
+		//		p2.get<string>("context_digest"), 
+		//		p2.get<string>("raw_crash_record_id"),
+		//		p2.get<string>("created_at"),
+		//		p2.get<string>("app_version"));*/
+		//	i++;
+		//}
 
 		delete con;
 	}
@@ -143,17 +154,22 @@ public:
 
 private:
 	//执行插入语句，向数据中插入异常数据信息
-	void InsertDataToDataBase(sql::Connection *con,const int id, const string context, const string raw, const string create, const string app)
+	void InsertDataToDataBase(sql::Connection *con, const string crash_id
+		, const string fixed, const string app_version, const string first_crash_date_time
+		, const string last_crash_date_time, const string crash_context_digest, const string crash_context)
 	{
 		sql::PreparedStatement *pstmt;
-		pstmt = con->prepareStatement("INSERT INTO ErrorInfo(ID,context_digest,raw_crash_record_id,created_at,app_version) VALUES(?,?,?,?,?)");
-		char idstr[20] = { 0 };
+		pstmt = con->prepareStatement("INSERT INTO ErrorInfo(crash_id,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?)");
+		/*char idstr[20] = { 0 };
 		_itoa(id, idstr, 10);
-		pstmt->setString(1, idstr);
-		pstmt->setString(2, context);
-		pstmt->setString(3, raw);
-		pstmt->setString(4, create);
-		pstmt->setString(5, app);
+		pstmt->setString(1, idstr);*/
+		pstmt->setString(1, crash_id);
+		pstmt->setString(2, fixed);
+		pstmt->setString(3, app_version);
+		pstmt->setString(4, first_crash_date_time);
+		pstmt->setString(5, last_crash_date_time);
+		pstmt->setString(6, crash_context_digest);
+		pstmt->setString(7, crash_context);
 
 		pstmt->execute();
 
@@ -163,9 +179,9 @@ private:
 	int GetErrorList()
 	{
 		analyzePage = "http://myou.cvte.com/api/in/analyze/" + appkey
-			+ "/crash_list_paging?platform=windows_app&app_version=&start_date=" + start_date
+			+ "/crash_list?platform=windows_app&app_version=&start_date=" + start_date
 			+ "&end_date=" + end_date
-			+ "&search_str=&limit=50&offset=0&zrandom=1469496795175";
+			+ "&limit=10&offset=0&fixed=false";
 		try
 		{
 			boost::asio::io_service io_service;
@@ -254,7 +270,7 @@ private:
 			}
 			std::cout << std::endl;*/
 			//把数据写入到文件中
-			//writeFile(errorList.c_str(), "out.txt");
+			writeFile(errorList.c_str(), "out.txt");
 		}
 		catch (std::exception& e)
 		{

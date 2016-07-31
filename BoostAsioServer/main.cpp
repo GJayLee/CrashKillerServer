@@ -79,7 +79,7 @@ struct CHelloWorld_Service
 		int current = 0;
 		std::generate_n(m_cnnIdPool.begin(), MaxConnectionNum, [&current] {return ++current; });
 	}
-
+	//¼àÌıÁ¬½Ó
 	void Accept()
 	{
 		//CheckHandlers();
