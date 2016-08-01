@@ -95,6 +95,8 @@ private:
 	//	});
 	//}
 
+	//从数据库中获取开发者信息并转换为JSON格式
+	void GetDeveloperInfo();
 	//从数据库中获取数据并把数据转为JSON格式上
 	void TransferDataToJson();
 	//从客户端收到更新信息，更新数据库
@@ -109,6 +111,7 @@ private:
 	void HandleError(const boost::system::error_code& ec);
 	//把数据写入到文件方便测试
 	void writeFile(std::vector<string> res, const char *fileName);
+	void writeFile(string res, const char *fileName);
 
 private:
 	ip::tcp::socket m_sock;
@@ -124,12 +127,15 @@ private:
 	std::vector<string> dataInJson;
 	//异常数据的索引ID
 	int dataToSendIndex;
+	//开发者信息，JSON格式
+	string developerInfo;
 
 	string appKey;
 	string start_date;
 	string end_date;
 
 	bool initErrorInfo;
+	bool initDeveloper;
 
 	MyHttpHandler *httphandler;
 };
