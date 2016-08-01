@@ -153,6 +153,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="MyHttpHandler.cpp" />
+    <ClCompile Include="RWHandler.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MyHttpHandler.h" />
