@@ -15,7 +15,7 @@ using boost::asio::ip::tcp;
 const int MAX_IP_PACK_SIZE = 100;
 const int HEAD_LEN = 1;
 
-const int SEND_SIZE = 65536;
+const int SEND_SIZE = 65535;
 
 class RWHandler
 {
@@ -30,10 +30,17 @@ public:
 		appKey = "";
 		start_date = "";
 		end_date = "";
+
+		dirver = get_driver_instance();
+		//连接数据库
+		con = dirver->connect("localhost", "root", "123456");
+		//选择mydata数据库
+		con->setSchema("CrashKiller");
 	}
 
 	~RWHandler()
 	{
+		delete con;
 	}
 
 	void HandleRead()
@@ -94,8 +101,13 @@ public:
 			}
 			else
 			{
-				string endStr = "End" + dataInJson[dataToSendIndex];
+				/*string endStr = "End" + dataInJson[dataToSendIndex];
 				m_sock.async_write_some(buffer(endStr.c_str() + offSet, dataInJson[dataToSendIndex].size() - offSet + 3),
+					boost::bind(&RWHandler::write_handler, this, placeholders::error));*/
+				//添加结束符告诉客户端这是该data的最后一段
+				char ascii = char(4);
+				string endStr = ascii + dataInJson[dataToSendIndex];
+				m_sock.async_write_some(buffer(endStr.c_str() + offSet, dataInJson[dataToSendIndex].size() - offSet + 1),
 					boost::bind(&RWHandler::write_handler, this, placeholders::error));
 			}
 
@@ -147,13 +159,13 @@ public:
 		return end_date;
 	}
 
-	void setSendData(const char* str)
+	/*void setSendData(const char* str)
 	{
 		sendData = new char[strlen(str) + 1];
 		memset(sendData, 0, sizeof(char)*(strlen(str) + 1));
 		strcpy(sendData, str);
 		offSet = 0;
-	}
+	}*/
 
 	template<typename F>
 	void SetCallBackError(F f)
@@ -202,18 +214,14 @@ private:
 	//	});
 	//}
 
+	//从数据库中获取数据并把数据转为JSON格式上
 	void TransferDataToJson()
 	{
 		dataInJson.clear();
-		sql::Driver *dirver;
-		sql::Connection *con;
+		
 		sql::Statement *stmt;
 		sql::ResultSet *res;
-		dirver = get_driver_instance();
-		//连接数据库
-		con = dirver->connect("localhost", "root", "123456");
-		//选择mydata数据库
-		con->setSchema("CrashKiller");
+		
 		//con->setClientOption("characterSetResults", "utf8");
 		stmt = con->createStatement();
 
@@ -224,11 +232,13 @@ private:
 		//循环遍历
 		while (res->next())
 		{
+			//把取出的信息转换为JSON格式
 			std::stringstream stream;
 			ptree pt, pt1, pt2;
 			int id = 1;
 			pt1.put<int>("id", id);
 			pt1.put("crash_id", res->getString("crash_id"));
+			pt1.put("developerid", res->getString("developerid"));
 			pt1.put("fixed", res->getString("fixed"));
 			pt1.put("app_version", res->getString("app_version"));
 			pt1.put("first_crash_date_time", res->getString("first_crash_date_time"));
@@ -244,14 +254,26 @@ private:
 
 		writeFile(dataInJson, "dataJson.txt");
 
-		//setSendData(result.c_str());
-
 		//清理
 		delete res;
 		delete stmt;
-		delete con;
 	}
 
+	//从客户端收到更新信息，更新数据库
+	void UpdateDatabase(string crash_id, string developerId, string fixed)
+	{
+		sql::Statement *stmt;
+
+		//con->setClientOption("characterSetResults", "utf8");
+		stmt = con->createStatement();
+		string sqlStateMent = "UPDATE erorinfo SET developerid = " + developerId
+			+ ",fixed = " + fixed + " WHERE crash_id = " + crash_id;
+		stmt->execute(sqlStateMent);
+
+		delete stmt;
+	}
+
+	//从数据库中取出数据，未处理，测试
 	void GetDatabaseData()
 	{
 		sql::Driver *dirver;
@@ -281,7 +303,7 @@ private:
 				+ res->getString("crash_context");
 		}
 
-		setSendData(result.c_str());
+		//setSendData(result.c_str());
 
 		//清理
 		delete res;
@@ -317,6 +339,7 @@ private:
 		}
 		else
 		{
+			//客户端初始化时调用
 			if (initErrorInfo || strcmp(&(*str)[0], "Init") == 0)
 			{
 				if (!initErrorInfo)
@@ -346,11 +369,13 @@ private:
 							boost::system::error_code ec;
 							write(m_sock, buffer("SendFinish", 10), ec);
 							initErrorInfo = false;
-							//关闭连接
-							CloseSocket();
-							std::cout << "断开连接" << m_connId << std::endl;
-							if (m_callbackError)
-								m_callbackError(m_connId);
+							//HandleRead();
+							////关闭连接
+							//CloseSocket();
+							//std::cout << "断开连接" << m_connId << std::endl;
+							//if (m_callbackError)
+							//	m_callbackError(m_connId);
+
 						}
 					}
 					else
@@ -369,6 +394,13 @@ private:
 					}
 				}
 			}
+			//客户端返回更新内容，如分配给哪个用户，异常是否已解决时调用
+			else if (strcmp(&(*str)[0], "Update") == 0)
+			{
+				UpdateDatabase("0533e5d3-7bf6-4a75-95c9-b5b3b3264880","18520147781","true");
+				HandleRead();
+			}
+			//其他情况，测试
 			else
 			{
 				std::cout << "接收消息：" << &(*str)[0] << std::endl;
@@ -394,7 +426,7 @@ private:
 					httphandler->setStartDate(start_date);
 					httphandler->setEndDate(end_date);
 					string errorList = httphandler->PostHttpRequest();
-					setSendData(errorList.c_str());
+					//setSendData(errorList.c_str());
 					httphandler->ParseJsonAndInsertToDatabase();
 
 					offSet = 0;
@@ -438,7 +470,11 @@ private:
 	int m_connId;
 	std::function<void(int)> m_callbackError;
 	int offSet;
-	char *sendData = NULL;
+	//char *sendData = NULL;
+
+	//连接数据库
+	sql::Driver *dirver;
+	sql::Connection *con;
 
 	std::vector<string> dataInJson;
 	int dataToSendIndex;

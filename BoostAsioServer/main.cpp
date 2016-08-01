@@ -57,13 +57,13 @@ const int UPDATE_TIME = 300;
 
 //从萌友平台获取异常数据时的默认appKey、start_date和end_date
 string defaultAppKey = "9e4b010a0d51f6e020ead6ce37bad33896a00f90";
-string defaultStartDate = "2016-07-20";
+string defaultStartDate = "2016-01-1";
 string defaultEndDate = "2016-07-26";
 
 struct CHelloWorld_Service
 {
 	CHelloWorld_Service(io_service &iosev):m_iosev(iosev)
-		, m_acceptor(iosev, tcp::endpoint(tcp::v4(),80)), m_timer(iosev, boost::posix_time::seconds(UPDATE_TIME))
+		, m_acceptor(iosev, tcp::endpoint(tcp::v4(),1000)), m_timer(iosev, boost::posix_time::seconds(UPDATE_TIME))
 		, m_cnnIdPool(MaxConnectionNum)
 		
 	{
@@ -73,6 +73,13 @@ struct CHelloWorld_Service
 		httphandler->ParseJsonAndInsertToDatabase();*/
 		
 		httphandler = new MyHttpHandler();
+		//测试使用
+		/*httphandler->setAppKey(defaultAppKey);
+		httphandler->setStartDate(defaultStartDate);
+		httphandler->setEndDate(defaultEndDate);
+		httphandler->PostHttpRequest();
+		httphandler->ParseJsonAndInsertToDatabase();*/
+
 		//此处的http请求应改为每隔一段时间触发
 		m_timer.async_wait(boost::bind(&CHelloWorld_Service::wait_handler, this));
 

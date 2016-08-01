@@ -113,20 +113,22 @@ public:
 		stmt->execute("delete from errorinfo");
 		delete stmt;
 		
-		ptree pt, p1;
+		ptree pt, pt1, pt2;
 		std::stringstream stream;
 		stream << errorList;
 		read_json<ptree>(stream, pt);
 		
-		int i = 0;
-		for (ptree::iterator it = pt.begin(); it != pt.end(); ++it)
+		pt1 = pt.get_child("data");
+		
+		for (ptree::iterator it = pt1.begin(); it != pt1.end(); ++it)
 		{
-			p1 = it->second;
+			pt2 = it->second;
 			//std::cout << "app_version:" << p1.get<string>("app_version") << std::endl;
-			InsertDataToDataBase(con, p1.get<string>("crash_id"), p1.get<string>("fixed"),
-				p1.get<string>("app_version"), p1.get<string>("first_crash_date_time"),
-				p1.get<string>("last_crash_date_time"), p1.get<string>("crash_context_digest"), p1.get<string>("crash_context"));
-			i++;
+			InsertDataToDataBase(con, pt2.get<string>("crash_id"), pt2.get<string>("fixed"),
+				pt2.get<string>("app_version"), pt2.get<string>("first_crash_date_time"),
+				pt2.get<string>("last_crash_date_time"), pt2.get<string>("crash_context_digest"), pt2.get<string>("crash_context"));
+			
+			//InsertDeveloperInfo(con, p1.get<string>("crash_context_digest"));
 		}
 
 		//int totalCount = pt.get<int>("totalCount");
@@ -158,18 +160,30 @@ private:
 		, const string fixed, const string app_version, const string first_crash_date_time
 		, const string last_crash_date_time, const string crash_context_digest, const string crash_context)
 	{
+		//从异常信息中提取出开发者的id
+		//第一次出现等号的位置
+		int equalIndex = crash_context_digest.find_first_of("=");
+		//第一次出现左括号的位置
+		int leftIndex = crash_context_digest.find_first_of("(");
+		//开发者id的长度
+		int idLength = leftIndex - 1 - equalIndex;
+		string id;
+		if (idLength > 0)
+			id = crash_context_digest.substr(equalIndex + 1, idLength);
+		else
+			id = "";
+
 		sql::PreparedStatement *pstmt;
-		pstmt = con->prepareStatement("INSERT INTO ErrorInfo(crash_id,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?)");
-		/*char idstr[20] = { 0 };
-		_itoa(id, idstr, 10);
-		pstmt->setString(1, idstr);*/
+		pstmt = con->prepareStatement("INSERT INTO ErrorInfo(crash_id,developerid,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)");
+		
 		pstmt->setString(1, crash_id);
-		pstmt->setString(2, fixed);
-		pstmt->setString(3, app_version);
-		pstmt->setString(4, first_crash_date_time);
-		pstmt->setString(5, last_crash_date_time);
-		pstmt->setString(6, crash_context_digest);
-		pstmt->setString(7, crash_context);
+		pstmt->setString(2, id);
+		pstmt->setString(3, fixed);
+		pstmt->setString(4, app_version);
+		pstmt->setString(5, first_crash_date_time);
+		pstmt->setString(6, last_crash_date_time);
+		pstmt->setString(7, crash_context_digest);
+		pstmt->setString(8, crash_context);
 
 		pstmt->execute();
 
@@ -181,7 +195,7 @@ private:
 		analyzePage = "http://myou.cvte.com/api/in/analyze/" + appkey
 			+ "/crash_list?platform=windows_app&app_version=&start_date=" + start_date
 			+ "&end_date=" + end_date
-			+ "&limit=10&offset=0&fixed=false";
+			+ "&limit=50&offset=0&fixed=false";
 		try
 		{
 			boost::asio::io_service io_service;
@@ -270,7 +284,7 @@ private:
 			}
 			std::cout << std::endl;*/
 			//把数据写入到文件中
-			writeFile(errorList.c_str(), "out.txt");
+			//writeFile(errorList.c_str(), "receiveData.txt");
 		}
 		catch (std::exception& e)
 		{
@@ -361,12 +375,14 @@ private:
 			std::istream is(&response);
 			is.unsetf(std::ios_base::skipws);
 			tokenInfo.append(std::istream_iterator<char>(is), std::istream_iterator<char>());
+			//writeFile(tokenInfo.c_str(), "token.txt");
 
-			ptree pt;
+			ptree pt, pt1;
 			std::stringstream stream;
 			stream << tokenInfo;
 			read_json<ptree>(stream, pt);
-			token = pt.get<string>("token");
+			pt1 = pt.get_child("data");
+			token = pt1.get<string>("token");
 
 			/*if (error != boost::asio::error::eof)
 			{
@@ -396,6 +412,41 @@ private:
 		out << std::endl;
 
 		out.close();
+	}
+
+	//根据异常信息提取开发者信息
+	void InsertDeveloperInfo(sql::Connection *con, string info)
+	{	
+		//第一次出现等号的位置
+		int equalIndex = info.find_first_of("=");
+		//第一次出现左括号的位置
+		int leftIndex = info.find_first_of("(");
+		//第一次出现右括号的位置
+		int rightIndex = info.find_first_of(")");
+		//开发者id的长度
+		int idLength = leftIndex - 1 - equalIndex;
+		string id;
+		if (idLength > 0)
+			id = info.substr(equalIndex + 1, idLength);
+		else
+			return;
+		//开发者名字的长度
+		string name;
+		int nameLeghth = rightIndex - 1 - leftIndex;
+		if (nameLeghth > 0)
+			name = info.substr(leftIndex + 1, nameLeghth);
+		else
+			return;
+
+		sql::PreparedStatement *pstmt;
+		pstmt = con->prepareStatement("INSERT IGNORE INTO developer(ID,Name) VALUES(?,?)");
+		
+		pstmt->setString(1, id);
+		pstmt->setString(2, name);
+
+		pstmt->execute();
+
+		delete pstmt;
 	}
 
 	string host;
