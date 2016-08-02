@@ -124,7 +124,8 @@ void MyHttpHandler::ParseJsonAndInsertToDatabase()
 			pt2.get<string>("app_version"), pt2.get<string>("first_crash_date_time"),
 			pt2.get<string>("last_crash_date_time"), pt2.get<string>("crash_context_digest"), pt2.get<string>("crash_context"));
 
-		InsertModulesInfo(con, pt2.get<string>("crash_context"));
+		//测试
+		//InsertModulesInfo(con, pt2.get<string>("crash_context"));
 		//InsertDeveloperInfo(con, p1.get<string>("crash_context_digest"));
 	}
 
@@ -152,6 +153,53 @@ void MyHttpHandler::ParseJsonAndInsertToDatabase()
 	delete con;
 }
 
+//根据异常中堆栈的模块信息智能分配异常，返回分配的开发者名字
+string MyHttpHandler::AutoDistributeCrash(sql::Connection *con, string crash_context)
+{
+	string developerName = "";
+	string moduleName = "";
+	const char *regStr = "Cvte(\\.[0-9a-zA-Z]+){1}";
+	boost::regex reg(regStr);
+	boost::smatch m;
+	while (boost::regex_search(crash_context, m, reg))
+	{
+		boost::smatch::iterator it = m.begin();
+		moduleName = it->str();
+		break;
+		//crash_context = m.suffix().str();
+	}
+	if (moduleName != "")
+	{
+		sql::PreparedStatement *pstmt;
+		sql::ResultSet *res;
+
+		string sqlStatement = "select developer_id from moduleinfo where module_name = \"" + moduleName + "\"";
+		//从errorinfo表中获取所有信息
+		pstmt = con->prepareStatement(sqlStatement);
+		res = pstmt->executeQuery();
+		
+		string developer_id;
+		while (res->next())
+			developer_id = res->getString("developer_id");
+
+		delete pstmt;
+		delete res;
+
+		sqlStatement = "";
+		sqlStatement = "select Name from developer where ID = \"" + developer_id + "\"";
+		con->prepareStatement(sqlStatement);
+		res = pstmt->executeQuery();
+
+		while(res->next())
+			developerName = res->getString("Name");
+
+		delete res;
+	}
+	
+	return developerName;
+}
+
+//从异常堆栈信息中提取出模块信息
 void MyHttpHandler::InsertModulesInfo(sql::Connection *con, string crash_context)
 {
 	//字符串匹配Cvte的信息
@@ -174,7 +222,7 @@ void MyHttpHandler::InsertModulesInfo(sql::Connection *con, string crash_context
 
 	//正则表达式匹配固定格式的字符串
 	//const char *regStr = "Cvte(\\.[0-9a-zA-Z]+){1,4}";
-	const char *regStr = "Cvte(\\.[0-9a-zA-Z]+){2}";
+	const char *regStr = "Cvte(\\.[0-9a-zA-Z]+){1}";
 	boost::regex reg(regStr);
 	boost::smatch m;
 	while (boost::regex_search(crash_context, m, reg))
@@ -221,13 +269,15 @@ void MyHttpHandler::InsertDataToDataBase(sql::Connection *con, const string cras
 	else
 		id = "";
 
+	string developerName = AutoDistributeCrash(con, crash_context);
+
 	sql::PreparedStatement *pstmt;
 	//使用replace语句，如果数据库中有相同主键的数据，则更新数据库信息
 	//pstmt = con->prepareStatement("REPLACE INTO ErrorInfo(crash_id,developerid,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)");
-	pstmt = con->prepareStatement("INSERT IGNORE INTO ErrorInfo(crash_id,developerid,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)");
+	pstmt = con->prepareStatement("INSERT IGNORE INTO ErrorInfo(crash_id,developer,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)");
 	
 	pstmt->setString(1, crash_id);
-	pstmt->setString(2, id);
+	pstmt->setString(2, developerName);
 	pstmt->setString(3, fixed);
 	pstmt->setString(4, app_version);
 	pstmt->setString(5, first_crash_date_time);

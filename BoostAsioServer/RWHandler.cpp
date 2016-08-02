@@ -253,7 +253,7 @@ void RWHandler::TransferDataToJson()
 		std::stringstream stream;
 		ptree pt, pt1, pt2;
 		pt1.put("crash_id", res->getString("crash_id"));
-		pt1.put("developerid", res->getString("developerid"));
+		pt1.put("developer", res->getString("developer"));
 		pt1.put("fixed", res->getString("fixed"));
 		pt1.put("app_version", res->getString("app_version"));
 		pt1.put("first_crash_date_time", res->getString("first_crash_date_time"));

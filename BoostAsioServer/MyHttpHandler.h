@@ -48,6 +48,8 @@ private:
 	void InsertModulesInfo(sql::Connection *con, string crash_context);
 	//根据异常信息提取发现者信息
 	void InsertDeveloperInfo(sql::Connection *con, string info);
+	//根据异常中堆栈的模块信息智能分配异常，返回分配的开发者名字
+	string AutoDistributeCrash(sql::Connection *con, string crash_context);
 
 	string host;                  //主机
 	string loginPage;             //登陆网址
