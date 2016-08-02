@@ -44,7 +44,9 @@ private:
 	//把数据写入到文本文件中方便查看，测试
 	void writeFile(const char *src, const char *fileName);
 
-	//根据异常信息提取开发者信息
+	//根据异常信息提取功能模块信息
+	void InsertModulesInfo(sql::Connection *con, string crash_context);
+	//根据异常信息提取发现者信息
 	void InsertDeveloperInfo(sql::Connection *con, string info);
 
 	string host;                  //主机

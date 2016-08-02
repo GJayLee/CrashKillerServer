@@ -6,6 +6,7 @@
 #include <boost\property_tree\ptree.hpp>
 #include <boost\property_tree\json_parser.hpp>
 #include <boost\date_time.hpp>
+#include <boost\regex.hpp>
 
 #include "MyHttpHandler.h"
 
@@ -123,6 +124,7 @@ void MyHttpHandler::ParseJsonAndInsertToDatabase()
 			pt2.get<string>("app_version"), pt2.get<string>("first_crash_date_time"),
 			pt2.get<string>("last_crash_date_time"), pt2.get<string>("crash_context_digest"), pt2.get<string>("crash_context"));
 
+		InsertModulesInfo(con, pt2.get<string>("crash_context"));
 		//InsertDeveloperInfo(con, p1.get<string>("crash_context_digest"));
 	}
 
@@ -150,6 +152,58 @@ void MyHttpHandler::ParseJsonAndInsertToDatabase()
 	delete con;
 }
 
+void MyHttpHandler::InsertModulesInfo(sql::Connection *con, string crash_context)
+{
+	//字符串匹配Cvte的信息
+	/*int pos=crash_context.find("Cvte");
+	while (pos != string::npos)
+	{
+		int i = pos;
+		while (crash_context[i] != '(')
+			i++;
+
+		sql::PreparedStatement *pstmt;
+		//插入模块信息，如果数据库中有相同主键的数据，则更新数据库信息
+		pstmt = con->prepareStatement("INSERT IGNORE INTO moduleInfo(module_name) VALUES(?)");
+		pstmt->setString(1, crash_context.substr(pos,i-pos));
+		pstmt->execute();
+		delete pstmt;
+
+		pos = crash_context.find("Cvte", i + 1);
+	}*/
+
+	//正则表达式匹配固定格式的字符串
+	//const char *regStr = "Cvte(\\.[0-9a-zA-Z]+){1,4}";
+	const char *regStr = "Cvte(\\.[0-9a-zA-Z]+){2}";
+	boost::regex reg(regStr);
+	boost::smatch m;
+	while (boost::regex_search(crash_context, m, reg))
+	{
+		//遍历模块信息
+		/*for (boost::smatch::iterator it = m.begin(); it != m.end(); it+=2)
+		{
+			std::cout << it->str() << std::endl;
+			sql::PreparedStatement *pstmt;
+			//插入模块信息，如果数据库中有相同主键的数据，则更新数据库信息
+			pstmt = con->prepareStatement("INSERT IGNORE INTO moduleInfo(module_name) VALUES(?)");
+			pstmt->setString(1, it->str());
+			pstmt->execute();
+			delete pstmt;
+		}*/
+
+		boost::smatch::iterator it = m.begin();
+		//std::cout << it->str() << std::endl;
+		sql::PreparedStatement *pstmt;
+		//插入模块信息，如果数据库中有相同主键的数据，则更新数据库信息
+		pstmt = con->prepareStatement("INSERT IGNORE INTO moduleInfo(module_name) VALUES(?)");
+		pstmt->setString(1, it->str());
+		pstmt->execute();
+		delete pstmt;
+
+		crash_context = m.suffix().str();
+	}
+}
+
 void MyHttpHandler::InsertDataToDataBase(sql::Connection *con, const string crash_id
 	, const string fixed, const string app_version, const string first_crash_date_time
 	, const string last_crash_date_time, const string crash_context_digest, const string crash_context)
@@ -169,8 +223,9 @@ void MyHttpHandler::InsertDataToDataBase(sql::Connection *con, const string cras
 
 	sql::PreparedStatement *pstmt;
 	//使用replace语句，如果数据库中有相同主键的数据，则更新数据库信息
-	pstmt = con->prepareStatement("REPLACE INTO ErrorInfo(crash_id,developerid,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)");
-
+	//pstmt = con->prepareStatement("REPLACE INTO ErrorInfo(crash_id,developerid,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)");
+	pstmt = con->prepareStatement("INSERT IGNORE INTO ErrorInfo(crash_id,developerid,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)");
+	
 	pstmt->setString(1, crash_id);
 	pstmt->setString(2, id);
 	pstmt->setString(3, fixed);
@@ -279,7 +334,7 @@ int MyHttpHandler::GetErrorList()
 		}
 		std::cout << std::endl;*/
 		//把数据写入到文件中
-		//writeFile(errorList.c_str(), "receiveData.txt");
+		writeFile(errorList.c_str(), "receiveData.txt");
 	}
 	catch (std::exception& e)
 	{
