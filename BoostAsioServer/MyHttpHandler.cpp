@@ -93,13 +93,20 @@ void MyHttpHandler::ParseJsonAndInsertToDatabase()
 	dirver = get_driver_instance();
 	//连接数据库
 	con = dirver->connect("localhost", "root", "123456");
+	if (con == NULL)
+	{
+		std::cout << "不能连接数据库！" << std::endl;
+		return;
+	}
 	//选择CrashKiller数据库
 	con->setSchema("CrashKiller");
 
-	sql::Statement *stmt;
-	stmt = con->createStatement();
-	stmt->execute("delete from errorinfo");
-	delete stmt;
+	//sql::Statement *stmt;
+	//stmt = con->createStatement();
+	//stmt->execute("delete from errorinfo");
+	//delete stmt;
+
+	con->setAutoCommit(0);
 
 	ptree pt, pt1, pt2;
 	std::stringstream stream;
@@ -118,6 +125,8 @@ void MyHttpHandler::ParseJsonAndInsertToDatabase()
 
 		//InsertDeveloperInfo(con, p1.get<string>("crash_context_digest"));
 	}
+
+	con->commit();
 
 	//int totalCount = pt.get<int>("totalCount");
 	//std::cout << "totalCount:" << totalCount << std::endl;
@@ -159,7 +168,8 @@ void MyHttpHandler::InsertDataToDataBase(sql::Connection *con, const string cras
 		id = "";
 
 	sql::PreparedStatement *pstmt;
-	pstmt = con->prepareStatement("INSERT INTO ErrorInfo(crash_id,developerid,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)");
+	//使用replace语句，如果数据库中有相同主键的数据，则更新数据库信息
+	pstmt = con->prepareStatement("REPLACE INTO ErrorInfo(crash_id,developerid,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)");
 
 	pstmt->setString(1, crash_id);
 	pstmt->setString(2, id);
