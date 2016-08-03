@@ -369,7 +369,6 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 			}
 			else
 			{
-				//if ((offSet + SEND_SIZE) > strlen(sendData))
 				if (strcmp(&(*str)[0], "Ok") == 0)
 				{
 					if ((offSet + SEND_SIZE) > dataInJson[dataToSendIndex].size())
@@ -387,13 +386,13 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 							boost::system::error_code ec;
 							write(m_sock, buffer("SendFinish", 10), ec);
 							initErrorInfo = false;
+
 							//HandleRead();
 							////关闭连接
 							//CloseSocket();
 							//std::cout << "断开连接" << m_connId << std::endl;
 							//if (m_callbackError)
 							//	m_callbackError(m_connId);
-
 						}
 					}
 					else

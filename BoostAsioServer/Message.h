@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 
+//²âÊÔ
 class Message
 {
 public:

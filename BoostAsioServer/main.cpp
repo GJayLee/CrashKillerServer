@@ -33,7 +33,6 @@
 //	return 0;
 //}
 
-
 //异步方式
 #include <iostream>
 #include <string>
@@ -52,8 +51,8 @@ using ip::tcp;
 //最大连接数
 const int MaxConnectionNum = 65536;
 const int MaxRecvSize = 65536;
-//设置服务器更新时间为5分钟
-const int UPDATE_TIME = 300;
+//设置服务器更新时间为30分钟
+const int UPDATE_TIME = 1800;
 
 //从萌友平台获取异常数据时的默认appKey、start_date和end_date
 string defaultAppKey = "9e4b010a0d51f6e020ead6ce37bad33896a00f90";
@@ -198,7 +197,7 @@ struct CHelloWorld_Service
 	}*/
 
 private:
-	//每隔5分钟调用一次http请求更新数据
+	//每隔30分钟调用一次http请求更新数据
 	void wait_handler()
 	{
 		//如果appkey、start_date和end_date为空，则赋予它们一个默认值进行更新

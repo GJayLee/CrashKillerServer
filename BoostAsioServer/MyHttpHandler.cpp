@@ -318,26 +318,41 @@ void MyHttpHandler::InsertDataToDataBase(sql::Connection *con, const string cras
 	//else
 	//	id = "";
 
-	//根据异常信息中的模块信息把异常智能分配给开发者
-	string developerName = AutoDistributeCrash(con, crash_context);
-
+	//首先判断数据库中是否已存在该异常数据
 	sql::PreparedStatement *pstmt;
-	//使用replace语句，如果数据库中有相同主键的数据，则更新数据库信息
-	//pstmt = con->prepareStatement("REPLACE INTO ErrorInfo(crash_id,developerid,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)");
-	pstmt = con->prepareStatement("INSERT IGNORE INTO ErrorInfo(crash_id,developer,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)");
-	
-	pstmt->setString(1, crash_id);
-	pstmt->setString(2, developerName);
-	pstmt->setString(3, fixed);
-	pstmt->setString(4, app_version);
-	pstmt->setString(5, first_crash_date_time);
-	pstmt->setString(6, last_crash_date_time);
-	pstmt->setString(7, crash_context_digest);
-	pstmt->setString(8, crash_context);
-
-	pstmt->execute();
+	string sqlStatement = "select crash_context from errorinfo where crash_id = \"" + crash_id + "\"";
+	pstmt = con->prepareStatement(sqlStatement);
+	sql::ResultSet *res;
+	res = pstmt->executeQuery();
+	bool isExisted = false;
+	while (res->next())
+		isExisted = true;
 
 	delete pstmt;
+	delete res;
+	//不存在则添加到数据库中
+	if (!isExisted)
+	{
+		//根据异常信息中的模块信息把异常智能分配给开发者
+		string developerName = AutoDistributeCrash(con, crash_context);
+
+		//使用replace语句，如果数据库中有相同主键的数据，则更新数据库信息
+		//pstmt = con->prepareStatement("REPLACE INTO ErrorInfo(crash_id,developerid,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)");
+		pstmt = con->prepareStatement("INSERT INTO ErrorInfo(crash_id,developer,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)");
+
+		pstmt->setString(1, crash_id);
+		pstmt->setString(2, developerName);
+		pstmt->setString(3, fixed);
+		pstmt->setString(4, app_version);
+		pstmt->setString(5, first_crash_date_time);
+		pstmt->setString(6, last_crash_date_time);
+		pstmt->setString(7, crash_context_digest);
+		pstmt->setString(8, crash_context);
+
+		pstmt->execute();
+
+		delete pstmt;
+	}
 }
 
 int MyHttpHandler::GetErrorList()
