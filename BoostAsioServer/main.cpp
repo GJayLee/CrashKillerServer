@@ -67,7 +67,6 @@ struct CHelloWorld_Service
 		, m_cnnIdPool(MaxConnectionNum)
 		
 	{
-		
 		/*httphandler = new MyHttpHandler("9e4b010a0d51f6e020ead6ce37bad33896a00f90", "2016-07-20", "2016-07-26");
 		httphandler->PostHttpRequest();
 		httphandler->ParseJsonAndInsertToDatabase();*/

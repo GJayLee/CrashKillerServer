@@ -1,6 +1,7 @@
 /*从萌友平台获取数据，HTTP请求处理类,
 同时把获取到的数据写入数据库中*/
 
+#include<unordered_map>
 #include <fstream>
 #include <boost/asio.hpp>
 #include <boost\property_tree\ptree.hpp>
@@ -86,6 +87,8 @@ void MyHttpHandler::PostHttpRequest()
 	std::cout << "Get Error List finish!" << std::endl;
 }
 
+//解析从萌友获取的数据，并插入数据库中，如果数据中有该异常的信息，则不再插入
+//只插入新获取到的异常信息
 void MyHttpHandler::ParseJsonAndInsertToDatabase()
 {
 	//连接数据库
@@ -153,22 +156,68 @@ void MyHttpHandler::ParseJsonAndInsertToDatabase()
 	delete con;
 }
 
-//根据异常中堆栈的模块信息智能分配异常，返回分配的开发者名字
+//根据异常中堆栈的模块信息的权重智能分配异常，返回分配的开发者名字
 string MyHttpHandler::AutoDistributeCrash(sql::Connection *con, string crash_context)
 {
 	string developerName = "";
 	string moduleName = "";
-	const char *regStr = "Cvte(\\.[0-9a-zA-Z]+){1}";
+	const char *regStr = "Cvte(\\.[0-9a-zA-Z]+){2}";
 	boost::regex reg(regStr);
 	boost::smatch m;
+	std::unordered_map<string, int> developerWeight;
+	int maxWeight = 0;
+	string maxId;
+
+	//查找数据库信息
+	sql::PreparedStatement *pstmt;
+	sql::ResultSet *res;
+	string sqlStatement;
+
 	while (boost::regex_search(crash_context, m, reg))
 	{
 		boost::smatch::iterator it = m.begin();
 		moduleName = it->str();
-		break;
-		//crash_context = m.suffix().str();
+
+
+		sqlStatement = "select developer_id from moduleinfo where module_name = \"" + moduleName + "\"";
+		//从errorinfo表中获取所有信息
+		pstmt = con->prepareStatement(sqlStatement);
+		res = pstmt->executeQuery();
+
+		string developer_id;
+		while (res->next())
+			developer_id = res->getString("developer_id");
+
+		delete pstmt;
+		delete res;
+
+		if (developerWeight.find(developer_id) == developerWeight.end())
+			developerWeight[developer_id] = 1;
+		else
+		{
+			//找出权重最大的开发者，因为一条异常中可能涉及几个模块，每个模块都由不同
+			//开发者实现，一个模块给开发者的权重加1
+			developerWeight[developer_id]++;
+			if (developerWeight[developer_id] > maxWeight)
+			{
+				maxId = developer_id;
+				maxWeight = developerWeight[developer_id];
+			}
+		}
+		crash_context = m.suffix().str();
 	}
-	if (moduleName != "")
+
+	sqlStatement = "select Name from developer where ID = \"" + maxId + "\"";
+	pstmt = con->prepareStatement(sqlStatement);
+	res = pstmt->executeQuery();
+
+	while (res->next())
+		developerName = res->getString("Name");
+
+	delete pstmt;
+	delete res;
+
+	/*if (moduleName != "")
 	{
 		sql::PreparedStatement *pstmt;
 		sql::ResultSet *res;
@@ -194,12 +243,12 @@ string MyHttpHandler::AutoDistributeCrash(sql::Connection *con, string crash_con
 			developerName = res->getString("Name");
 
 		delete res;
-	}
+	}*/
 	
 	return developerName;
 }
 
-//从异常堆栈信息中提取出模块信息
+//从异常堆栈信息中提取出模块信息,测试，初始化
 void MyHttpHandler::InsertModulesInfo(sql::Connection *con, string crash_context)
 {
 	//字符串匹配Cvte的信息
@@ -222,7 +271,7 @@ void MyHttpHandler::InsertModulesInfo(sql::Connection *con, string crash_context
 
 	//正则表达式匹配固定格式的字符串
 	//const char *regStr = "Cvte(\\.[0-9a-zA-Z]+){1,4}";
-	const char *regStr = "Cvte(\\.[0-9a-zA-Z]+){1}";
+	const char *regStr = "Cvte(\\.[0-9a-zA-Z]+){2}";
 	boost::regex reg(regStr);
 	boost::smatch m;
 	while (boost::regex_search(crash_context, m, reg))
@@ -256,19 +305,20 @@ void MyHttpHandler::InsertDataToDataBase(sql::Connection *con, const string cras
 	, const string fixed, const string app_version, const string first_crash_date_time
 	, const string last_crash_date_time, const string crash_context_digest, const string crash_context)
 {
-	//从异常信息中提取出开发者的id
-	//第一次出现等号的位置
-	int equalIndex = crash_context_digest.find_first_of("=");
-	//第一次出现左括号的位置
-	int leftIndex = crash_context_digest.find_first_of("(");
-	//开发者id的长度
-	int idLength = leftIndex - 1 - equalIndex;
-	string id;
-	if (idLength > 0)
-		id = crash_context_digest.substr(equalIndex + 1, idLength);
-	else
-		id = "";
+	////从异常信息中提取出开发者的id
+	////第一次出现等号的位置
+	//int equalIndex = crash_context_digest.find_first_of("=");
+	////第一次出现左括号的位置
+	//int leftIndex = crash_context_digest.find_first_of("(");
+	////开发者id的长度
+	//int idLength = leftIndex - 1 - equalIndex;
+	//string id;
+	//if (idLength > 0)
+	//	id = crash_context_digest.substr(equalIndex + 1, idLength);
+	//else
+	//	id = "";
 
+	//根据异常信息中的模块信息把异常智能分配给开发者
 	string developerName = AutoDistributeCrash(con, crash_context);
 
 	sql::PreparedStatement *pstmt;
