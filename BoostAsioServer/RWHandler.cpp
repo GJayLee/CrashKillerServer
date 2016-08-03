@@ -254,7 +254,7 @@ void RWHandler::TransferDataToJson()
 	string result = "";
 	//从errorinfo表中获取所有信息
 	res = stmt->executeQuery("select * from errorinfo");
-
+	//ptree pt3, pt4;
 	//循环遍历
 	while (res->next())
 	{
@@ -271,10 +271,16 @@ void RWHandler::TransferDataToJson()
 		pt1.put("crash_context", res->getString("crash_context"));
 
 		pt2.push_back(make_pair("", pt1));
+		//pt3.push_back(make_pair("", pt1));
 		pt.put_child("data", pt2);
 		write_json(stream, pt);
 		dataInJson.push_back(stream.str());
 	}
+	//测试
+	/*pt4.put_child("datas", pt3);
+	std::stringstream stream;
+	write_json(stream, pt4);
+	writeFile(stream.str(), "dataJson.txt");*/
 
 	//writeFile(dataInJson, "dataJson.txt");
 
@@ -402,7 +408,7 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 							write(m_sock, buffer(sendStr, sendStr.size()), ec);
 							initErrorInfo = false;
 
-							//HandleRead();
+							HandleRead();
 							////关闭连接
 							//CloseSocket();
 							//std::cout << "断开连接" << m_connId << std::endl;
@@ -446,6 +452,7 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 						string sendStr = GetSendData(EOT, "SendFinish");
 						write(m_sock, buffer(sendStr, sendStr.size()), ec);
 						initDeveloper = false;
+						HandleRead();
 					}
 					else
 					{
@@ -471,34 +478,33 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 		{
 			std::cout << "接收消息：" << &(*str)[0] << std::endl;
 			HandleRead();
-			char command[7] = { 0 };
-			char msg[100] = { 0 };
-			for (int i = 0; i < 6; i++)
-			{
-				command[i] = (*str)[i];
-				msg[i] = (*str)[i];
-			}
-			for (int i = 6; i < str->size(); i++)
-				msg[i] = (*str)[i];
-			if (strcmp(command, "Update") == 0)
-			{
-				//std::cout << "接收消息：" << command << std::endl;
-				std::vector<std::string> vec;
-				boost::split(vec, msg, boost::is_any_of("+"));
-				appKey = vec[1];
-				start_date = vec[2];
-				end_date = vec[3];
-				httphandler->setAppKey(appKey);
-				httphandler->setStartDate(start_date);
-				httphandler->setEndDate(end_date);
-				httphandler->PostHttpRequest();
-				//setSendData(errorList.c_str());
-				httphandler->ParseJsonAndInsertToDatabase();
-
-				offSet = 0;
-				initErrorInfo = true;
-				HandleWrite();
-			}
+			//char command[7] = { 0 };
+			//char msg[100] = { 0 };
+			//for (int i = 0; i < 6; i++)
+			//{
+			//	command[i] = (*str)[i];
+			//	msg[i] = (*str)[i];
+			//}
+			//for (int i = 6; i < str->size(); i++)
+			//	msg[i] = (*str)[i];
+			//if (strcmp(command, "Update") == 0)
+			//{
+			//	//std::cout << "接收消息：" << command << std::endl;
+			//	std::vector<std::string> vec;
+			//	boost::split(vec, msg, boost::is_any_of("+"));
+			//	appKey = vec[1];
+			//	start_date = vec[2];
+			//	end_date = vec[3];
+			//	httphandler->setAppKey(appKey);
+			//	httphandler->setStartDate(start_date);
+			//	httphandler->setEndDate(end_date);
+			//	httphandler->PostHttpRequest();
+			//	//setSendData(errorList.c_str());
+			//	httphandler->ParseJsonAndInsertToDatabase();
+			//	offSet = 0;
+			//	initErrorInfo = true;
+			//	HandleWrite();
+			//}
 		}
 	}
 }
