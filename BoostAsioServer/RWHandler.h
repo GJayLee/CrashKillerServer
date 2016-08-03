@@ -1,6 +1,7 @@
 #pragma once
 
 #include<iostream>
+#include<unordered_map>
 #include<boost\asio.hpp>
 #include <boost\property_tree\ptree.hpp>
 #include <boost\property_tree\json_parser.hpp>
@@ -109,6 +110,17 @@ private:
 	void read_handler(const boost::system::error_code& ec, boost::shared_ptr<std::vector<char> > str);
 	//处理连接错误异常
 	void HandleError(const boost::system::error_code& ec);
+
+	//循环使用send ID
+	void RecyclSendId(int sendId)
+	{
+		auto it = sendIDArray.find(sendId);
+		if (it != sendIDArray.end())
+			sendIDArray.erase(it);
+		//std::cout << "current connect count: " << m_handlers.size() << std::endl;
+		sendIds.push_back(sendId);
+	}
+
 	//把数据写入到文件方便测试
 	void writeFile(std::vector<string> res, const char *fileName);
 	void writeFile(string res, const char *fileName);
@@ -119,6 +131,8 @@ private:
 	std::function<void(int)> m_callbackError;
 	int offSet;
 	//char *sendData = NULL;
+	std::unordered_map<int, bool> sendIDArray;
+	std::list<int> sendIds;
 
 	//连接数据库
 	sql::Driver *dirver;
