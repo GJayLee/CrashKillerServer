@@ -90,17 +90,11 @@ void RWHandler::HandleWrite()
 		ss >> dataSize;
 		string data = dataSize + "+" + dataInJson[dataToSendIndex];*/
 
-		int sendId = sendIds.front();
-		sendIds.pop_front();
-		std::stringstream ss;
-		ss << sendId;
-		string indexStr = ss.str();
-		sendIDArray[sendId] = true;
 		//没有超过最大缓冲区，可以完整发送
 		if (dataInJson[dataToSendIndex].size() <= SEND_SIZE)
 		{
 			//添加结束符告诉客户端这是该data的最后一段
-			string sendStr = EOT + indexStr + dataInJson[dataToSendIndex];
+			string sendStr = GetSendData(EOT, dataInJson[dataToSendIndex]);
 			m_sock.async_write_some(buffer(sendStr.c_str(), sendStr.size()),
 				boost::bind(&RWHandler::write_handler, this, placeholders::error));
 		}
@@ -114,7 +108,7 @@ void RWHandler::HandleWrite()
 			if ((offSet + SEND_SIZE) >= dataInJson[dataToSendIndex].size())
 			{
 				string tempStr = dataInJson[dataToSendIndex].substr(offSet, dataInJson[dataToSendIndex].size() - offSet);
-				string sendStr = EOT + indexStr + tempStr;
+				string sendStr = GetSendData(EOT, tempStr);
 				m_sock.async_write_some(buffer(sendStr, sendStr.size()),
 					boost::bind(&RWHandler::write_handler, this, placeholders::error));
 				
@@ -122,12 +116,11 @@ void RWHandler::HandleWrite()
 			else
 			{
 				string tempStr = dataInJson[dataToSendIndex].substr(offSet, SEND_SIZE);
-				string sendStr = STX + indexStr + tempStr;
+				string sendStr = GetSendData(STX, tempStr);
 				m_sock.async_write_some(buffer(sendStr, sendStr.size()),
 					boost::bind(&RWHandler::write_handler, this, placeholders::error));
 			}
 		}
-		ss.clear();
 
 		/*int sendSize = 0;
 		if (strlen(sendData) - offSet < SEND_SIZE)
@@ -140,18 +133,12 @@ void RWHandler::HandleWrite()
 	//发送开发者信息
 	if (initDeveloper)
 	{
-		int sendId = sendIds.front();
-		sendIds.pop_front();
-		std::stringstream ss;
-		ss << sendId;
-		string indexStr = ss.str();
-		sendIDArray[sendId] = true;
 		//没有超过最大缓冲区，可以完整发送
 		if (developerInfo.size() <= SEND_SIZE)
 		{
 			//添加结束符告诉客户端这是该data的最后一段
-			string endStr = EOT + indexStr + developerInfo;
-			m_sock.async_write_some(buffer(endStr.c_str(), endStr.size()),
+			string sendStr = GetSendData(EOT, developerInfo);
+			m_sock.async_write_some(buffer(sendStr.c_str(), sendStr.size()),
 				boost::bind(&RWHandler::write_handler, this, placeholders::error));
 		}
 		else
@@ -161,15 +148,15 @@ void RWHandler::HandleWrite()
 			if ((offSet + SEND_SIZE) >= developerInfo.size())
 			{
 				string tempStr = developerInfo.substr(offSet, developerInfo.size() - offSet);
-				string endStr = EOT + indexStr + tempStr;
-				m_sock.async_write_some(buffer(endStr, endStr.size()),
+				string sendStr = GetSendData(EOT, tempStr);
+				m_sock.async_write_some(buffer(sendStr, sendStr.size()),
 					boost::bind(&RWHandler::write_handler, this, placeholders::error));
 			}
 			else
 			{
 				string tempStr = developerInfo.substr(offSet, SEND_SIZE);
-				string endStr = EOT + indexStr + tempStr;
-				m_sock.async_write_some(buffer(endStr, endStr.size()),
+				string sendStr = GetSendData(STX, tempStr);
+				m_sock.async_write_some(buffer(sendStr, sendStr.size()),
 					boost::bind(&RWHandler::write_handler, this, placeholders::error));
 			}
 		}
@@ -289,7 +276,7 @@ void RWHandler::TransferDataToJson()
 		dataInJson.push_back(stream.str());
 	}
 
-	writeFile(dataInJson, "dataJson.txt");
+	//writeFile(dataInJson, "dataJson.txt");
 
 	//清理
 	delete res;
@@ -377,6 +364,7 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 	else
 	{
 		//客户端请求初始化异常数据时调用
+		//if (initErrorInfo || strcmp(&(*str)[0], "Get Expect") == 0)
 		if (initErrorInfo || strcmp(&(*str)[2], "Get Expect") == 0)
 		{
 			//HandleWrite();
@@ -410,13 +398,7 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 						else
 						{
 							boost::system::error_code ec;
-							int sendId = sendIds.front();
-							sendIds.pop_front();
-							std::stringstream ss;
-							ss << sendId;
-							string indexStr = ss.str();
-							sendIDArray[sendId] = true;
-							string sendStr = EOT + indexStr + "SendFinish";
+							string sendStr = GetSendData(EOT,"SendFinish");
 							write(m_sock, buffer(sendStr, sendStr.size()), ec);
 							initErrorInfo = false;
 
@@ -443,7 +425,7 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 			}
 		}
 		//客户端发送获取开发者信息时
-		else if (initDeveloper || strcmp(&(*str)[0], "Get Develop") == 0)
+		else if (initDeveloper || strcmp(&(*str)[2], "Get Develop") == 0)
 		{
 			if (!initDeveloper)
 			{
@@ -461,7 +443,8 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 					{
 						std::cout << "开发者信息发送完成！" << std::endl;
 						boost::system::error_code ec;
-						write(m_sock, buffer("SendFinish", 10), ec);
+						string sendStr = GetSendData(EOT, "SendFinish");
+						write(m_sock, buffer(sendStr, sendStr.size()), ec);
 						initDeveloper = false;
 					}
 					else
@@ -520,6 +503,23 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 	}
 }
 
+//根据传输协议拼接发送消息     head+count+data
+string RWHandler::GetSendData(const char flag, string msg)
+{
+	int sendId = sendIds.front();
+	sendIds.pop_front();
+	std::stringstream ss;
+	ss << sendId;
+	string indexStr = ss.str();
+	sendIDArray[sendId] = true;
+
+	string data = flag + indexStr + msg;
+
+	//ss.clear();
+
+	return data;
+}
+
 void RWHandler::HandleError(const boost::system::error_code& ec)
 {
 	CloseSocket();
@@ -538,11 +538,22 @@ void RWHandler::writeFile(std::vector<string> res, const char *fileName)
 		std::cout << "Can not Open this file!" << std::endl;
 		return;
 	}
+	
+	std::stringstream stream;
+	ptree pt, pt1;
 	for (int i = 0; i < res.size(); i++)
 	{
-		out << res[i];
-		out << std::endl;
+		/*out << res[i];
+		out << std::endl;*/
+		//ptree pt1;
+		pt1.put("", res[i]);
+
+		pt.push_back(make_pair("", pt1));
 	}
+	//pt.put_child("datas", pt2);
+	write_json(stream, pt);
+
+	out << stream.str();
 
 	out.close();
 }

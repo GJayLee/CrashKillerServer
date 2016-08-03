@@ -111,6 +111,9 @@ private:
 	//处理连接错误异常
 	void HandleError(const boost::system::error_code& ec);
 
+	//根据传输协议拼接发送消息
+	string GetSendData(const char flag, string msg);
+
 	//循环使用send ID
 	void RecyclSendId(int sendId)
 	{
