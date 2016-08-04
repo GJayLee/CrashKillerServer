@@ -9,10 +9,9 @@
 
 const int SEND_SIZE = 65535;
 
-const char STX = '\2';       //正文开始
-const char EOT = '\4';       //正文结束
-const char ETX = '\3';       //收到
-const char ENQ = '\5';       //重新请求
+const string STX = "\x2";       //正文开始
+const string EOT = "\x4";       //正文结束
+const string ETX = "\x3";       //收到
 
 RWHandler::RWHandler(io_service& ios) : m_sock(ios), sendIds(9)
 {
@@ -52,7 +51,6 @@ void RWHandler::HandleRead()
 	//	}
 	//	
 	//	//std::cout << m_buff.size() << "," << m_buff.data() << std::endl;
-
 	//	//HandleRead();
 	//	offSet = offSet + 10;
 	//	HandleWrite();
@@ -289,18 +287,53 @@ void RWHandler::TransferDataToJson()
 	delete stmt;
 }
 
-//从客户端收到更新信息，更新数据库
-void RWHandler::UpdateDatabase(string crash_id, string developerId, string fixed)
+//从客户端收到更新信息Json格式，解析JSON，更新数据库
+void RWHandler::UpdateDatabase(string clientData)
+//void RWHandler::UpdateDatabase(string crash_id, string developer, string fixed)
 {
-	sql::Statement *stmt;
+	string crash_id, developerId, fixed;
 
-	//con->setClientOption("characterSetResults", "utf8");
-	stmt = con->createStatement();
-	string sqlStateMent = "UPDATE errorinfo SET developerid = \"" + developerId
-		+ "\",fixed = \"" + fixed + "\" WHERE crash_id = \"" + crash_id + "\"";
-	stmt->execute(sqlStateMent);
+	ptree pt;
+	std::stringstream stream;
+	stream << clientData;
+	read_json<ptree>(stream, pt);
+	developerId = pt.get<string>("Developer");
+	crash_id = pt.get<string>("CrashId");
+	fixed = pt.get<string>("Solve");
 
-	delete stmt;
+	//查找数据库信息
+	sql::PreparedStatement *pstmt;
+	sql::ResultSet *res;
+	string sqlStatement;
+	//把异常分配给开发者
+	if (developerId != "null")
+	{
+		string developer;
+		sqlStatement = "select Name from developer where ID = \"" + developerId + "\"";
+		pstmt = con->prepareStatement(sqlStatement);
+		res = pstmt->executeQuery();
+		while (res->next())
+			developer = res->getString("Name");
+
+		sql::Statement *stmt;
+		stmt = con->createStatement();
+		string sqlStateMent = "UPDATE errorinfo SET developer = \"" + developer
+			+ "\",fixed = \"" + fixed + "\" WHERE crash_id = \"" + crash_id + "\"";
+		stmt->execute(sqlStateMent);
+
+		delete stmt;
+		delete pstmt;
+		delete res;
+	}
+	//异常标记为已解决
+	else
+	{
+		sql::Statement *stmt;
+		stmt = con->createStatement();
+		string sqlStateMent = "UPDATE errorinfo SET fixed = \"" + fixed + "\" WHERE crash_id = \"" + crash_id + "\"";
+		stmt->execute(sqlStateMent);
+		delete stmt;
+	}
 }
 
 //从数据库中取出数据，未处理，测试
@@ -376,8 +409,14 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 			//HandleWrite();
 			if (!initErrorInfo)
 			{
-				initErrorInfo = true;
 				//GetDatabaseData();
+				boost::system::error_code ec;
+				string sendStr = ETX + (*str)[1] + "Receive";
+				write(m_sock, buffer(sendStr, sendStr.size()), ec);
+
+				Sleep(500);
+
+				initErrorInfo = true;
 				TransferDataToJson();
 				dataToSendIndex = 0;
 				offSet = 0;
@@ -385,8 +424,7 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 			}
 			else
 			{
-				//if (strcmp(&(*str)[0], ACK) == 0)
-				if ((*str)[0] == ETX)
+				if ((*str)[0] == ETX[0])
 				{
 					int sendId = (*str)[1] - '0';
 					RecyclSendId(sendId);
@@ -435,6 +473,12 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 		{
 			if (!initDeveloper)
 			{
+				boost::system::error_code ec;
+				string sendStr = ETX + (*str)[1] + "Receive";
+				write(m_sock, buffer(sendStr, sendStr.size()), ec);
+
+				Sleep(500);
+
 				initDeveloper = true;
 				GetDeveloperInfo();
 				offSet = 0;
@@ -442,9 +486,10 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 			}
 			else
 			{
-				//if (strcmp(&(*str)[0], "Ok") == 0)
-				if ((*str)[0] == ETX)
+				if ((*str)[0] == ETX[0])
 				{
+					int sendId = (*str)[1] - '0';
+					RecyclSendId(sendId);
 					if ((offSet + SEND_SIZE) > developerInfo.size())
 					{
 						std::cout << "开发者信息发送完成！" << std::endl;
@@ -468,16 +513,30 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 			}
 		}
 		//客户端返回更新内容，如分配给哪个用户，异常是否已解决时调用
-		else if (strcmp(&(*str)[0], "Update") == 0)
-		{
-			UpdateDatabase("0533e5d3-7bf6-4a75-95c9-b5b3b3264880", "18520147781", "false");
-			HandleRead();
-		}
+		//else if (strcmp(&(*str)[2], "Update") == 0)
+		//{
+		//	//UpdateDatabase("0533e5d3-7bf6-4a75-95c9-b5b3b3264880", "18520147781", "false");
+		//	HandleRead();
+		//}
 		//其他情况，测试
 		else
 		{
 			std::cout << "接收消息：" << &(*str)[0] << std::endl;
-			HandleRead();
+			//从客户端收到数据更新数据库
+			char command[3] = { 0 };
+			for (int i = 2; i < 4; i++)
+				command[i-2] = (*str)[i];
+			if (strcmp(command, "Up") == 0)
+			{
+				UpdateDatabase(&(*str)[4]);
+				boost::system::error_code ec;
+				string sendStr = ETX + (*str)[1] + "UpdateFinish";
+				write(m_sock, buffer(sendStr, sendStr.size()), ec);
+				HandleRead();
+			}
+			else
+				HandleRead();
+			
 			//char command[7] = { 0 };
 			//char msg[100] = { 0 };
 			//for (int i = 0; i < 6; i++)
@@ -510,7 +569,7 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 }
 
 //根据传输协议拼接发送消息     head+count+data
-string RWHandler::GetSendData(const char flag, string msg)
+string RWHandler::GetSendData(string flag, string msg)
 {
 	int sendId = sendIds.front();
 	sendIds.pop_front();

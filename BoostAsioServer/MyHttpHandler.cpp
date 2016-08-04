@@ -53,6 +53,17 @@ MyHttpHandler::MyHttpHandler()
 	loginPage = "http://myou.cvte.com/api/in/auth/login";
 	data = "{\"email\":\"lindexi@cvte.com\",\"password\":\"11111111\"}";
 	origin = "http://myou.cvte.com";
+	
+	//连接数据库
+	dirver = get_driver_instance();
+	con = dirver->connect("localhost", "root", "123456");
+	if (con == NULL)
+	{
+		std::cout << "不能连接数据库！" << std::endl;
+		return;
+	}
+	//选择CrashKiller数据库
+	con->setSchema("CrashKiller");
 }
 MyHttpHandler::MyHttpHandler(string a, string s, string e) : appkey(a), start_date(s), end_date(e)
 {
@@ -61,6 +72,17 @@ MyHttpHandler::MyHttpHandler(string a, string s, string e) : appkey(a), start_da
 	loginPage = "http://myou.cvte.com/api/in/auth/login";
 	data = "{\"email\":\"lindexi@cvte.com\",\"password\":\"11111111\"}";
 	origin = "http://myou.cvte.com";
+
+	//连接数据库
+	dirver = get_driver_instance();
+	con = dirver->connect("localhost", "root", "123456");
+	if (con == NULL)
+	{
+		std::cout << "不能连接数据库！" << std::endl;
+		return;
+	}
+	//选择CrashKiller数据库
+	con->setSchema("CrashKiller");
 }
 
 void MyHttpHandler::setAppKey(string key)
@@ -91,27 +113,11 @@ void MyHttpHandler::PostHttpRequest()
 //只插入新获取到的异常信息
 void MyHttpHandler::ParseJsonAndInsertToDatabase()
 {
-	//连接数据库
-	sql::Driver *dirver;
-	sql::Connection *con;
-	dirver = get_driver_instance();
-	//连接数据库
-	con = dirver->connect("localhost", "root", "123456");
-	if (con == NULL)
-	{
-		std::cout << "不能连接数据库！" << std::endl;
-		return;
-	}
-	//选择CrashKiller数据库
-	con->setSchema("CrashKiller");
-
 	//sql::Statement *stmt;
 	//stmt = con->createStatement();
 	//stmt->execute("delete from errorinfo");
 	//delete stmt;
-
 	con->setAutoCommit(0);
-
 	ptree pt, pt1, pt2;
 	std::stringstream stream;
 	stream << errorList;
@@ -123,13 +129,13 @@ void MyHttpHandler::ParseJsonAndInsertToDatabase()
 	{
 		pt2 = it->second;
 		//std::cout << "app_version:" << p1.get<string>("app_version") << std::endl;
-		InsertDataToDataBase(con, pt2.get<string>("crash_id"), pt2.get<string>("fixed"),
+		InsertDataToDataBase(pt2.get<string>("crash_id"), pt2.get<string>("fixed"),
 			pt2.get<string>("app_version"), pt2.get<string>("first_crash_date_time"),
 			pt2.get<string>("last_crash_date_time"), pt2.get<string>("crash_context_digest"), pt2.get<string>("crash_context"));
 
 		//测试
-		//InsertModulesInfo(con, pt2.get<string>("crash_context"));
-		//InsertDeveloperInfo(con, p1.get<string>("crash_context_digest"));
+		//InsertModulesInfo(pt2.get<string>("crash_context"));
+		//InsertDeveloperInfo(p1.get<string>("crash_context_digest"));
 	}
 
 	con->commit();
@@ -157,7 +163,7 @@ void MyHttpHandler::ParseJsonAndInsertToDatabase()
 }
 
 //根据异常中堆栈的模块信息的权重智能分配异常，返回分配的开发者名字
-string MyHttpHandler::AutoDistributeCrash(sql::Connection *con, string crash_context)
+string MyHttpHandler::AutoDistributeCrash(string crash_context)
 {
 	string developerName = "";
 	string moduleName = "";
@@ -248,8 +254,42 @@ string MyHttpHandler::AutoDistributeCrash(sql::Connection *con, string crash_con
 	return developerName;
 }
 
+//把同一个人的异常信息进行初步的分类
+void MyHttpHandler::AutoClassifyCrash(string developer)
+{
+	/*sql::PreparedStatement *pstmt;
+	string sqlStatement = "select developer from errorinfo group by developer";
+	pstmt = con->prepareStatement(sqlStatement);
+	sql::ResultSet *res;
+	res = pstmt->executeQuery();
+	std::vector<string> developer;
+	while (res->next())
+	{
+		if (res->getString("developer") != "")
+			developer.push_back(res->getString("developer"));
+	}
+
+	delete pstmt;
+	delete res;*/
+
+	sql::PreparedStatement *pstmt;
+	string sqlStatement = "select crash_id, crash_context from errorinfo where developer = \"" + developer + "\"";
+	pstmt = con->prepareStatement(sqlStatement);
+	pstmt = con->prepareStatement(sqlStatement);
+	sql::ResultSet *res;
+	res = pstmt->executeQuery();
+	std::unordered_map<string, string> crash;
+	while (res->next())
+		crash[res->getString("crash_id")] = res->getString("crash_context");
+
+
+
+	delete pstmt;
+	delete res;
+}
+
 //从异常堆栈信息中提取出模块信息,测试，初始化
-void MyHttpHandler::InsertModulesInfo(sql::Connection *con, string crash_context)
+void MyHttpHandler::InsertModulesInfo(string crash_context)
 {
 	//字符串匹配Cvte的信息
 	/*int pos=crash_context.find("Cvte");
@@ -301,9 +341,9 @@ void MyHttpHandler::InsertModulesInfo(sql::Connection *con, string crash_context
 	}
 }
 
-void MyHttpHandler::InsertDataToDataBase(sql::Connection *con, const string crash_id
-	, const string fixed, const string app_version, const string first_crash_date_time
-	, const string last_crash_date_time, const string crash_context_digest, const string crash_context)
+void MyHttpHandler::InsertDataToDataBase(const string crash_id, const string fixed, const string app_version
+	, const string first_crash_date_time, const string last_crash_date_time, const string crash_context_digest,
+	const string crash_context)
 {
 	////从异常信息中提取出开发者的id
 	////第一次出现等号的位置
@@ -334,7 +374,7 @@ void MyHttpHandler::InsertDataToDataBase(sql::Connection *con, const string cras
 	if (!isExisted)
 	{
 		//根据异常信息中的模块信息把异常智能分配给开发者
-		string developerName = AutoDistributeCrash(con, crash_context);
+		string developerName = AutoDistributeCrash(crash_context);
 
 		//使用replace语句，如果数据库中有相同主键的数据，则更新数据库信息
 		//pstmt = con->prepareStatement("REPLACE INTO ErrorInfo(crash_id,developerid,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)");
@@ -580,7 +620,7 @@ void MyHttpHandler::writeFile(const char *src, const char *fileName)
 }
 
 //根据异常信息提取开发者信息
-void MyHttpHandler::InsertDeveloperInfo(sql::Connection *con, string info)
+void MyHttpHandler::InsertDeveloperInfo(string info)
 {
 	//第一次出现等号的位置
 	int equalIndex = info.find_first_of("=");

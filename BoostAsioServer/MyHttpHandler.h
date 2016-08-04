@@ -33,7 +33,7 @@ public:
 
 private:
 	//执行插入语句，向数据中插入异常数据信息
-	void InsertDataToDataBase(sql::Connection *con, const string crash_id
+	void InsertDataToDataBase(const string crash_id
 		, const string fixed, const string app_version, const string first_crash_date_time
 		, const string last_crash_date_time, const string crash_context_digest, const string crash_context);
 
@@ -45,11 +45,13 @@ private:
 	void writeFile(const char *src, const char *fileName);
 
 	//根据异常信息提取功能模块信息
-	void InsertModulesInfo(sql::Connection *con, string crash_context);
+	void InsertModulesInfo(string crash_context);
 	//根据异常信息提取发现者信息
-	void InsertDeveloperInfo(sql::Connection *con, string info);
+	void InsertDeveloperInfo(string info);
 	//根据异常中堆栈的模块信息智能分配异常，返回分配的开发者名字
-	string AutoDistributeCrash(sql::Connection *con, string crash_context);
+	string AutoDistributeCrash(string crash_context);
+	//把同一个人的异常信息进行初步的分类
+	void AutoClassifyCrash(string developer);
 
 	string host;                  //主机
 	string loginPage;             //登陆网址
@@ -62,4 +64,8 @@ private:
 
 	string token;                 //登陆成功时返回的token
 	string errorList;             //异常数据列表，JSON格式
+
+	//连接数据库
+	sql::Driver *dirver;
+	sql::Connection *con;
 };

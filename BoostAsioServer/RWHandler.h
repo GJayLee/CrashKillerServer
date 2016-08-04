@@ -101,7 +101,8 @@ private:
 	//从数据库中获取数据并把数据转为JSON格式上
 	void TransferDataToJson();
 	//从客户端收到更新信息，更新数据库
-	void UpdateDatabase(string crash_id, string developerId, string fixed);
+	//void UpdateDatabase(string crash_id, string developerId, string fixed);
+	void UpdateDatabase(string clientData);
 	//从数据库中取出数据，未处理，测试
 	void GetDatabaseData();
 	// 异步写操作完成后write_handler触发
@@ -112,7 +113,7 @@ private:
 	void HandleError(const boost::system::error_code& ec);
 
 	//根据传输协议拼接发送消息
-	string GetSendData(const char flag, string msg);
+	string GetSendData(string flag, string msg);
 
 	//循环使用send ID
 	void RecyclSendId(int sendId)
