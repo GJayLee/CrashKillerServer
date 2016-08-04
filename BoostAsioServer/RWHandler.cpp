@@ -206,173 +206,7 @@ strcpy(sendData, str);
 offSet = 0;
 }*/
 
-//从数据库中获取开发者信息并转换为JSON格式
-void RWHandler::GetDeveloperInfo()
-{
-	sql::Statement *stmt;
-	sql::ResultSet *res;
 
-	stmt = con->createStatement();
-	developerInfo = "";
-	//从developer表中获取所有信息
-	res = stmt->executeQuery("select * from developer");
-	std::stringstream stream;
-	ptree pt, pt2;
-	//循环遍历
-	while (res->next())
-	{
-		ptree pt1;
-		//把取出的信息转换为JSON格式
-		pt1.put("Id", res->getString("ID"));
-		pt1.put("Name", res->getString("Name"));
-		pt2.push_back(make_pair("", pt1));
-	}
-
-	pt.put_child("developer", pt2);
-	write_json(stream, pt);
-	developerInfo = stream.str();
-
-	writeFile(developerInfo, "developInfo.txt");
-
-	delete stmt;
-	delete res;
-}
-
-//从数据库中获取数据并把数据转为JSON格式上
-void RWHandler::TransferDataToJson()
-{
-	dataInJson.clear();
-
-	sql::Statement *stmt;
-	sql::ResultSet *res;
-
-	//con->setClientOption("characterSetResults", "utf8");
-	stmt = con->createStatement();
-
-	string result = "";
-	//从errorinfo表中获取所有信息
-	res = stmt->executeQuery("select * from errorinfo");
-	//ptree pt3, pt4;
-	//循环遍历
-	while (res->next())
-	{
-		//把取出的信息转换为JSON格式
-		std::stringstream stream;
-		ptree pt, pt1, pt2;
-		pt1.put("crash_id", res->getString("crash_id"));
-		pt1.put("developer", res->getString("developer"));
-		pt1.put("fixed", res->getString("fixed"));
-		pt1.put("app_version", res->getString("app_version"));
-		pt1.put("first_crash_date_time", res->getString("first_crash_date_time"));
-		pt1.put("last_crash_date_time", res->getString("last_crash_date_time"));
-		pt1.put("crash_context_digest", res->getString("crash_context_digest"));
-		pt1.put("crash_context", res->getString("crash_context"));
-
-		pt2.push_back(make_pair("", pt1));
-		//pt3.push_back(make_pair("", pt1));
-		pt.put_child("data", pt2);
-		write_json(stream, pt);
-		dataInJson.push_back(stream.str());
-	}
-	//测试
-	/*pt4.put_child("datas", pt3);
-	std::stringstream stream;
-	write_json(stream, pt4);
-	writeFile(stream.str(), "dataJson.txt");*/
-
-	//writeFile(dataInJson, "dataJson.txt");
-
-	//清理
-	delete res;
-	delete stmt;
-}
-
-//从客户端收到更新信息Json格式，解析JSON，更新数据库
-void RWHandler::UpdateDatabase(string clientData)
-//void RWHandler::UpdateDatabase(string crash_id, string developer, string fixed)
-{
-	string crash_id, developerId, fixed;
-
-	ptree pt;
-	std::stringstream stream;
-	stream << clientData;
-	read_json<ptree>(stream, pt);
-	developerId = pt.get<string>("Developer");
-	crash_id = pt.get<string>("CrashId");
-	fixed = pt.get<string>("Solve");
-
-	//查找数据库信息
-	sql::PreparedStatement *pstmt;
-	sql::ResultSet *res;
-	string sqlStatement;
-	//把异常分配给开发者
-	if (developerId != "null")
-	{
-		string developer;
-		sqlStatement = "select Name from developer where ID = \"" + developerId + "\"";
-		pstmt = con->prepareStatement(sqlStatement);
-		res = pstmt->executeQuery();
-		while (res->next())
-			developer = res->getString("Name");
-
-		sql::Statement *stmt;
-		stmt = con->createStatement();
-		string sqlStateMent = "UPDATE errorinfo SET developer = \"" + developer
-			+ "\",fixed = \"" + fixed + "\" WHERE crash_id = \"" + crash_id + "\"";
-		stmt->execute(sqlStateMent);
-
-		delete stmt;
-		delete pstmt;
-		delete res;
-	}
-	//异常标记为已解决
-	else
-	{
-		sql::Statement *stmt;
-		stmt = con->createStatement();
-		string sqlStateMent = "UPDATE errorinfo SET fixed = \"" + fixed + "\" WHERE crash_id = \"" + crash_id + "\"";
-		stmt->execute(sqlStateMent);
-		delete stmt;
-	}
-}
-
-//从数据库中取出数据，未处理，测试
-void RWHandler::GetDatabaseData()
-{
-	sql::Driver *dirver;
-	sql::Connection *con;
-	sql::Statement *stmt;
-	sql::ResultSet *res;
-	dirver = get_driver_instance();
-	//连接数据库
-	con = dirver->connect("localhost", "root", "123456");
-	//选择mydata数据库
-	con->setSchema("CrashKiller");
-	//con->setClientOption("characterSetResults", "utf8");
-	stmt = con->createStatement();
-
-	string result = "";
-
-	//从name_table表中获取所有信息
-	res = stmt->executeQuery("select * from errorinfo");
-	//循环遍历
-	while (res->next())
-	{
-		//输出，id，name，age,work,others字段的信息
-		//cout << res->getString("name") << " | " << res->getInt("age") << endl;
-		result = result + res->getString("ID") + res->getString("crash_id")
-			+ res->getString("fixed") + res->getString("app_version")
-			+ res->getString("first_crash_date_time") + res->getString("crash_context_digest")
-			+ res->getString("crash_context");
-	}
-
-	//setSendData(result.c_str());
-
-	//清理
-	delete res;
-	delete stmt;
-	delete con;
-}
 
 // 异步写操作完成后write_handler触发
 //void write_handler(const boost::system::error_code& ec, boost::shared_ptr<std::string> str)
@@ -592,6 +426,174 @@ void RWHandler::HandleError(const boost::system::error_code& ec)
 	//std::cout << ec.message() << std::endl;
 	if (m_callbackError)
 		m_callbackError(m_connId);
+}
+
+//从数据库中获取开发者信息并转换为JSON格式
+void RWHandler::GetDeveloperInfo()
+{
+	sql::Statement *stmt;
+	sql::ResultSet *res;
+
+	stmt = con->createStatement();
+	developerInfo = "";
+	//从developer表中获取所有信息
+	res = stmt->executeQuery("select * from developer");
+	std::stringstream stream;
+	ptree pt, pt2;
+	//循环遍历
+	while (res->next())
+	{
+		ptree pt1;
+		//把取出的信息转换为JSON格式
+		pt1.put("Id", res->getString("ID"));
+		pt1.put("Name", res->getString("Name"));
+		pt2.push_back(make_pair("", pt1));
+	}
+
+	pt.put_child("developer", pt2);
+	write_json(stream, pt);
+	developerInfo = stream.str();
+
+	writeFile(developerInfo, "developInfo.txt");
+
+	delete stmt;
+	delete res;
+}
+
+//从数据库中获取数据并把数据转为JSON格式上
+void RWHandler::TransferDataToJson()
+{
+	dataInJson.clear();
+
+	sql::Statement *stmt;
+	sql::ResultSet *res;
+
+	//con->setClientOption("characterSetResults", "utf8");
+	stmt = con->createStatement();
+
+	string result = "";
+	//从errorinfo表中获取所有信息
+	res = stmt->executeQuery("select * from errorinfo");
+	//ptree pt3, pt4;
+	//循环遍历
+	while (res->next())
+	{
+		//把取出的信息转换为JSON格式
+		std::stringstream stream;
+		ptree pt, pt1, pt2;
+		pt1.put("crash_id", res->getString("crash_id"));
+		pt1.put("developer", res->getString("developer"));
+		pt1.put("fixed", res->getString("fixed"));
+		pt1.put("app_version", res->getString("app_version"));
+		pt1.put("first_crash_date_time", res->getString("first_crash_date_time"));
+		pt1.put("last_crash_date_time", res->getString("last_crash_date_time"));
+		pt1.put("crash_context_digest", res->getString("crash_context_digest"));
+		pt1.put("crash_context", res->getString("crash_context"));
+
+		pt2.push_back(make_pair("", pt1));
+		//pt3.push_back(make_pair("", pt1));
+		pt.put_child("data", pt2);
+		write_json(stream, pt);
+		dataInJson.push_back(stream.str());
+	}
+	//测试
+	/*pt4.put_child("datas", pt3);
+	std::stringstream stream;
+	write_json(stream, pt4);
+	writeFile(stream.str(), "dataJson.txt");*/
+
+	//writeFile(dataInJson, "dataJson.txt");
+
+	//清理
+	delete res;
+	delete stmt;
+}
+
+//从客户端收到更新信息Json格式，解析JSON，更新数据库
+void RWHandler::UpdateDatabase(string clientData)
+//void RWHandler::UpdateDatabase(string crash_id, string developer, string fixed)
+{
+	string crash_id, developerId, fixed;
+
+	ptree pt;
+	std::stringstream stream;
+	stream << clientData;
+	read_json<ptree>(stream, pt);
+	developerId = pt.get<string>("Developer");
+	crash_id = pt.get<string>("CrashId");
+	fixed = pt.get<string>("Solve");
+
+	//查找数据库信息
+	sql::PreparedStatement *pstmt;
+	sql::ResultSet *res;
+	string sqlStatement;
+	//把异常分配给开发者
+	if (developerId != "null")
+	{
+		string developer;
+		sqlStatement = "select Name from developer where ID = \"" + developerId + "\"";
+		pstmt = con->prepareStatement(sqlStatement);
+		res = pstmt->executeQuery();
+		while (res->next())
+			developer = res->getString("Name");
+
+		sql::Statement *stmt;
+		stmt = con->createStatement();
+		string sqlStateMent = "UPDATE errorinfo SET developer = \"" + developer
+			+ "\",fixed = \"" + fixed + "\" WHERE crash_id = \"" + crash_id + "\"";
+		stmt->execute(sqlStateMent);
+
+		delete stmt;
+		delete pstmt;
+		delete res;
+	}
+	//异常标记为已解决
+	else
+	{
+		sql::Statement *stmt;
+		stmt = con->createStatement();
+		string sqlStateMent = "UPDATE errorinfo SET fixed = \"" + fixed + "\" WHERE crash_id = \"" + crash_id + "\"";
+		stmt->execute(sqlStateMent);
+		delete stmt;
+	}
+}
+
+//从数据库中取出数据，未处理，测试
+void RWHandler::GetDatabaseData()
+{
+	sql::Driver *dirver;
+	sql::Connection *con;
+	sql::Statement *stmt;
+	sql::ResultSet *res;
+	dirver = get_driver_instance();
+	//连接数据库
+	con = dirver->connect("localhost", "root", "123456");
+	//选择mydata数据库
+	con->setSchema("CrashKiller");
+	//con->setClientOption("characterSetResults", "utf8");
+	stmt = con->createStatement();
+
+	string result = "";
+
+	//从name_table表中获取所有信息
+	res = stmt->executeQuery("select * from errorinfo");
+	//循环遍历
+	while (res->next())
+	{
+		//输出，id，name，age,work,others字段的信息
+		//cout << res->getString("name") << " | " << res->getInt("age") << endl;
+		result = result + res->getString("ID") + res->getString("crash_id")
+			+ res->getString("fixed") + res->getString("app_version")
+			+ res->getString("first_crash_date_time") + res->getString("crash_context_digest")
+			+ res->getString("crash_context");
+	}
+
+	//setSendData(result.c_str());
+
+	//清理
+	delete res;
+	delete stmt;
+	delete con;
 }
 
 //把数据写入到文件方便测试

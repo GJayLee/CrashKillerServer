@@ -18,6 +18,7 @@ public:
 	//构造函数
 	MyHttpHandler();
 	MyHttpHandler(string a, string s, string e);
+	~MyHttpHandler();
 
 	//设置项目ID
 	void setAppKey(string key);
@@ -29,7 +30,8 @@ public:
 	void PostHttpRequest();
 	//解析异常数据列表，并写入数据库中
 	void ParseJsonAndInsertToDatabase();
-
+	//把同一个人的异常信息进行初步的分类
+	void AutoClassifyCrash(string developer);
 
 private:
 	//执行插入语句，向数据中插入异常数据信息
@@ -51,7 +53,11 @@ private:
 	//根据异常中堆栈的模块信息智能分配异常，返回分配的开发者名字
 	string AutoDistributeCrash(string crash_context);
 	//把同一个人的异常信息进行初步的分类
-	void AutoClassifyCrash(string developer);
+	//void AutoClassifyCrash(string developer);
+	//简单字符串对比，返回相似度
+	int Levenshtein(string str1, string str2);
+	//求三个数的最小值
+	int min(int a, int b, int c);
 
 	string host;                  //主机
 	string loginPage;             //登陆网址

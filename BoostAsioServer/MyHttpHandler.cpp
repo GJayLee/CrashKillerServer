@@ -8,6 +8,8 @@
 #include <boost\property_tree\json_parser.hpp>
 #include <boost\date_time.hpp>
 #include <boost\regex.hpp>
+#include<algorithm>
+#include<math.h>
 
 #include "MyHttpHandler.h"
 
@@ -85,6 +87,11 @@ MyHttpHandler::MyHttpHandler(string a, string s, string e) : appkey(a), start_da
 	con->setSchema("CrashKiller");
 }
 
+MyHttpHandler::~MyHttpHandler()
+{
+	delete con;
+}
+
 void MyHttpHandler::setAppKey(string key)
 {
 	appkey = key;
@@ -159,7 +166,6 @@ void MyHttpHandler::ParseJsonAndInsertToDatabase()
 	//	i++;
 	//}
 
-	delete con;
 }
 
 //根据异常中堆栈的模块信息的权重智能分配异常，返回分配的开发者名字
@@ -272,20 +278,70 @@ void MyHttpHandler::AutoClassifyCrash(string developer)
 	delete pstmt;
 	delete res;*/
 
+	std::vector<string> crash_id;
+	std::vector<string> crash_context;
+	std::unordered_map<int, std::vector<int>> crash_sim;
+
 	sql::PreparedStatement *pstmt;
 	string sqlStatement = "select crash_id, crash_context from errorinfo where developer = \"" + developer + "\"";
 	pstmt = con->prepareStatement(sqlStatement);
-	pstmt = con->prepareStatement(sqlStatement);
 	sql::ResultSet *res;
 	res = pstmt->executeQuery();
-	std::unordered_map<string, string> crash;
+
 	while (res->next())
-		crash[res->getString("crash_id")] = res->getString("crash_context");
-
-
+	{
+		crash_id.push_back(res->getString("crash_id"));
+		crash_context.push_back(res->getString("crash_context"));
+	}
+	for (int i = 0; i < crash_context.size()-1; i++)
+	{
+		crash_sim[i].push_back(0);
+		for (int j = i+1; j < crash_context.size(); j++)
+		{
+			int similarity = Levenshtein(crash_context[i], crash_context[j]);
+			crash_sim[i].push_back(similarity);
+			crash_sim[j].push_back(similarity);
+		}
+	}
 
 	delete pstmt;
 	delete res;
+}
+
+//简单字符串对比，返回相似度
+int MyHttpHandler::Levenshtein(string str1, string str2)
+{
+	int len1 = str1.length();
+	int len2 = str2.length();
+	int **dif = new int*[len1 + 1];
+	for (int i = 0; i < len1 + 1; i++)
+	{
+		dif[i] = new int[len2 + 1];
+		memset(dif[i], 0, sizeof(int)*(len2 + 1));
+	}
+	for (int i = 0; i <= len1; i++)
+		dif[i][0] = i;
+	for (int i = 0; i <= len2; i++)
+		dif[0][i] = i;
+
+	for (int i = 1; i <= len1; i++)
+	{
+		for (int j = 1; j <= len2; j++)
+		{
+			if (str1[i - 1] == str2[j - 1])
+				dif[i][j] = dif[i - 1][j - 1];
+			else
+				dif[i][j] = min(dif[i][j - 1], dif[i - 1][j], dif[i - 1][j - 1]) + 1;
+		}
+	}
+	float similarity = 1 - (float)dif[len1][len2] / std::max(len1, len2);
+	//百分比
+	similarity *= 100;
+
+	for (int i = 0; i < len1 + 1; i++)
+		delete[] dif[i];
+	
+	return (int)similarity;
 }
 
 //从异常堆栈信息中提取出模块信息,测试，初始化
@@ -603,6 +659,28 @@ int MyHttpHandler::GetLoginToken()
 		return -4;
 	}
 	return 0;
+}
+
+//求三个数的最小值
+int MyHttpHandler::min(int a, int b, int c) {
+	if (a > b) {
+		if (b > c)
+			return c;
+		else
+			return b;
+	}
+	if (a > c) {
+		if (c > b)
+			return b;
+		else
+			return c;
+	}
+	if (b > c) {
+		if (c > a)
+			return a;
+		else
+			return c;
+	}
 }
 
 void MyHttpHandler::writeFile(const char *src, const char *fileName)
