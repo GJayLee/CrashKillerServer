@@ -32,5 +32,8 @@
     <ClInclude Include="MyHttpHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="MyProjectsConfigure.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

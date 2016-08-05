@@ -34,12 +34,12 @@ public:
 	void SetConnId(int connId);
 	//获取当前socket的ID
 	int GetConnId() const;
-	//获取项目ID
-	string GetAppKey();
-	//获取异常数据的开始日期
-	string GetStartDate();
-	//获取异常数据的结束日期
-	string GetEndDate();
+	////获取项目ID
+	//string GetAppKey();
+	////获取异常数据的开始日期
+	//string GetStartDate();
+	////获取异常数据的结束日期
+	//string GetEndDate();
 
 	/*void setSendData(const char* str)
 	{
@@ -56,46 +56,9 @@ public:
 	}
 
 private:
-	//void do_read_header()
-	//{
-	//	//auto self(boost::shared_from_this());
-	//	boost::asio::async_read(m_sock,
-	//		boost::asio::buffer(read_msg.data(), Message::header_length),
-	//		[this](boost::system::error_code ec, std::size_t /*length*/)
-	//	{
-	//		if (!ec && read_msg.decode_header())
-	//		{
-	//			do_read_body();
-	//		}
-	//		else
-	//		{
-	//			HandleError(ec);
-	//			return;
-	//		}
-	//	});
-	//}
-
-	//void do_read_body()
-	//{
-	//	//auto self(shared_from_this());
-	//	boost::asio::async_read(m_sock,
-	//		boost::asio::buffer(read_msg.body(), read_msg.body_length()),
-	//		[this](boost::system::error_code ec, std::size_t /*length*/)
-	//	{
-	//		if (!ec)
-	//		{
-	//			std::cout << "data" << read_msg.data() << std::endl;
-	//			//room_.deliver(read_msg_);
-	//			do_read_header();
-	//		}
-	//		else
-	//		{
-	//			HandleError(ec);
-	//			return;
-	//		}
-	//	});
-	//}
-
+	//从项目配置文件中获取appkey
+	void InitProjectsTables();
+	
 	//从数据库中获取开发者信息并转换为JSON格式
 	void GetDeveloperInfo();
 	//从数据库中获取数据并把数据转为JSON格式上
@@ -148,12 +111,10 @@ private:
 	//开发者信息，JSON格式
 	string developerInfo;
 
-	string appKey;
-	string start_date;
-	string end_date;
+	std::vector<string> tables;
 
 	bool initErrorInfo;
 	bool initDeveloper;
 
-	MyHttpHandler *httphandler;
+	//MyHttpHandler *httphandler;
 };

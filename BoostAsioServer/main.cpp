@@ -65,9 +65,9 @@ struct CHelloWorld_Service
 			httphandler->ParseJsonAndInsertToDatabase();*/
 
 			handler->HandleRead();
-			appKey = handler->GetAppKey();
+			/*appKey = handler->GetAppKey();
 			start_date = handler->GetStartDate();
-			end_date = handler->GetEndDate();
+			end_date = handler->GetEndDate();*/
 
 			//handler->setSendData(errorList.c_str());
 			//handler->HandleWrite();

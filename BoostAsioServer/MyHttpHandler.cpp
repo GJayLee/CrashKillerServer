@@ -61,9 +61,9 @@ char* G2U(const char* gb2312)
 MyHttpHandler::MyHttpHandler()
 {
 	//设置默认请求的appkey、start_date和end_date
-	appkey = defaultAppKey;
+	/*appkey = defaultAppKey;
 	start_date = defaultStartDate;
-	end_date = defaultEndDate;
+	end_date = defaultEndDate;*/
 	//设置Header信息
 	host = "myou.cvte.com";
 	loginPage = "http://myou.cvte.com/api/in/auth/login";
@@ -80,13 +80,16 @@ MyHttpHandler::MyHttpHandler()
 	}
 	//选择CrashKiller数据库
 	con->setSchema("CrashKiller");
+
+	InitDatabaseTabelByAppkey();
 }
-MyHttpHandler::MyHttpHandler(string a, string s, string e) : appkey(a), start_date(s), end_date(e)
+MyHttpHandler::MyHttpHandler(string a, string s, string e)
+//MyHttpHandler::MyHttpHandler(string a, string s, string e) : appkey(a), start_date(s), end_date(e)
 {
 	//设置默认请求的appkey、start_date和end_date
-	appkey = defaultAppKey;
+	/*appkey = defaultAppKey;
 	start_date = defaultStartDate;
-	end_date = defaultEndDate;
+	end_date = defaultEndDate;*/
 	//设置Header信息
 	host = "myou.cvte.com";
 	loginPage = "http://myou.cvte.com/api/in/auth/login";
@@ -103,37 +106,119 @@ MyHttpHandler::MyHttpHandler(string a, string s, string e) : appkey(a), start_da
 	}
 	//选择CrashKiller数据库
 	con->setSchema("CrashKiller");
+
+	InitDatabaseTabelByAppkey();
 }
 
 MyHttpHandler::~MyHttpHandler()
 {
 	delete con;
 }
-
+//设置appkey
 void MyHttpHandler::setAppKey(string key)
 {
-	appkey = key;
+	//appkey = key;
 }
-
+//设置开始日期
 void MyHttpHandler::setStartDate(string date)
 {
-	start_date = date;
+	//start_date = date;
 }
-
+//设置结束日期
 void MyHttpHandler::setEndDate(string date)
 {
-	end_date = date;
+	//end_date = date;
+}
+
+//根据外部配置文件中的appkey在数据库中创建对应的表
+void MyHttpHandler::InitDatabaseTabelByAppkey()
+{
+	//读取配置文件中appkey信息
+	std::ifstream t("ProjectsConfigure.txt");
+	if (!t)
+	{
+		std::cout << "打开项目Appkey配置文件失败！" << std::endl;
+		return;
+	}
+	std::stringstream buffer;
+	buffer << t.rdbuf();
+
+	try 
+	{
+		ptree pt, pt1, pt2;
+		read_json<ptree>(buffer, pt);
+		pt1 = pt.get_child("projects");
+		for (ptree::iterator it = pt1.begin(); it != pt1.end(); ++it)
+		{
+			pt2 = it->second;
+			appkeys.push_back(pt2.get<string>("appkey"));
+			tables.push_back(pt2.get<string>("tableName"));
+			starts.push_back(pt2.get<string>("start_date"));
+			ends.push_back(pt2.get<string>("end_date"));
+		}
+
+		con->setAutoCommit(0);
+		//遍历appkey，如果数据库中不存在该appkey的表，则创建
+		for (int i = 0; i < appkeys.size(); i++)
+		{
+			sql::PreparedStatement *pstmt;
+			string sqlStatement;
+			string str1 = "CREATE TABLE if not EXISTS " + tables[i] + " (crash_id varchar(255) PRIMARY KEY NOT NULL,";
+			string str2 = "developer varchar(255) DEFAULT NULL, fixed VARCHAR(255) DEFAULT NULL,app_version VARCHAR(255) DEFAULT NULL,";
+			string str3 = "first_crash_date_time VARCHAR(255) DEFAULT NULL,last_crash_date_time VARCHAR(255) DEFAULT NULL,";
+			string str4 = "crash_context_digest VARCHAR(255) DEFAULT NULL,crash_context text DEFAULT NULL) ENGINE = InnoDB DEFAULT CHARSET = utf8";
+			sqlStatement = str1 + str2 + str3 + str4;
+			pstmt = con->prepareStatement(sqlStatement);
+			pstmt->execute();
+
+			delete pstmt;
+		}
+		con->commit();
+	}
+	catch (std::exception& e)
+	{
+		std::cout << "解析配置文件出错！" << std::endl;
+	}
+	
+}
+
+//开始执行操作，向萌友请求异常数据，并写入数据库
+void MyHttpHandler::excuteAction()
+{	
+	for (int i = 0; i < appkeys.size(); i++)
+	{
+		//第一次向萌友请求数据，最大数量为50个
+		errorList = "";
+		token = "";
+		GetLoginToken();
+		std::cout << "Get Token finish!" << std::endl;
+		//第一次请求偏移量为0，从第一个位置开始获取
+		GetErrorList("0", appkeys[i], starts[i], ends[i]);
+		//解析第一次获取的数据，并写入数据库中
+		ParseJsonAndInsertToDatabase(tables[i]);
+
+		//计算偏移量
+		int offset = 1;
+		//如果接收达到最大限制，则修改offset，继续请求查看是否还有别的数据
+		while (count >= MAX_LIMIT)
+		{
+			errorList = "";
+			std::stringstream offsetStr;
+			int offsetIndex = MAX_LIMIT*offset;
+			offsetStr << offsetIndex;
+			//计算偏移量，从偏移量处开始获取
+			GetErrorList(offsetStr.str(), appkeys[i], starts[i], ends[i]);
+			ParseJsonAndInsertToDatabase(tables[i]);
+			++offset;
+		}
+		std::cout << "Get Error List finish!" << std::endl;
+	}
 }
 
 //解析从萌友获取的数据，并插入数据库中，如果数据中有该异常的信息，则不再插入
 //只插入新获取到的异常信息
-void MyHttpHandler::ParseJsonAndInsertToDatabase()
+void MyHttpHandler::ParseJsonAndInsertToDatabase(string tableName)
 {
-	//sql::Statement *stmt;
-	//stmt = con->createStatement();
-	//stmt->execute("delete from errorinfo");
-	//delete stmt;
-	
 	//统计该请求是否已达到最大值，limit
 	count = 0;
 	//如果获取的异常数列为空，则证明已接收完成
@@ -152,7 +237,7 @@ void MyHttpHandler::ParseJsonAndInsertToDatabase()
 	{
 		pt2 = it->second;
 		//std::cout << "app_version:" << p1.get<string>("app_version") << std::endl;
-		InsertDataToDataBase(pt2.get<string>("crash_id"), pt2.get<string>("fixed"),
+		InsertDataToDataBase(tableName, pt2.get<string>("crash_id"), pt2.get<string>("fixed"),
 			pt2.get<string>("app_version"), pt2.get<string>("first_crash_date_time"),
 			pt2.get<string>("last_crash_date_time"), pt2.get<string>("crash_context_digest"), pt2.get<string>("crash_context"));
 
@@ -163,36 +248,6 @@ void MyHttpHandler::ParseJsonAndInsertToDatabase()
 	}
 
 	con->commit();
-}
-
-//向萌友请求数据，并写入数据库
-void MyHttpHandler::excuteAction()
-{	
-	//第一次向萌友请求数据，最大数量为50个
-	errorList = "";
-	token = "";
-	GetLoginToken();
-	std::cout << "Get Token finish!" << std::endl;
-	//第一次请求偏移量为0，从第一个位置开始获取
-	GetErrorList("0");
-	//解析第一次获取的数据，并写入数据库中
-	ParseJsonAndInsertToDatabase();
-
-	//计算偏移量
-	int offset = 1;
-	//如果接收达到最大限制，则修改offset，继续请求查看是否还有别的数据
-	while (count >= MAX_LIMIT)
-	{
-		errorList = "";
-		std::stringstream offsetStr;
-		int offsetIndex = MAX_LIMIT*offset;
-		offsetStr << offsetIndex;
-		//计算偏移量，从偏移量处开始获取
-		GetErrorList(offsetStr.str());
-		ParseJsonAndInsertToDatabase();
-		++offset;
-	}
-	std::cout << "Get Error List finish!" << std::endl;
 }
 
 //根据异常中堆栈的模块信息的权重智能分配异常，返回分配的开发者名字
@@ -335,42 +390,6 @@ void MyHttpHandler::AutoClassifyCrash(string developer)
 	delete res;
 }
 
-//简单字符串对比，返回相似度,测试
-int MyHttpHandler::Levenshtein(string str1, string str2)
-{
-	int len1 = str1.length();
-	int len2 = str2.length();
-	int **dif = new int*[len1 + 1];
-	for (int i = 0; i < len1 + 1; i++)
-	{
-		dif[i] = new int[len2 + 1];
-		memset(dif[i], 0, sizeof(int)*(len2 + 1));
-	}
-	for (int i = 0; i <= len1; i++)
-		dif[i][0] = i;
-	for (int i = 0; i <= len2; i++)
-		dif[0][i] = i;
-
-	for (int i = 1; i <= len1; i++)
-	{
-		for (int j = 1; j <= len2; j++)
-		{
-			if (str1[i - 1] == str2[j - 1])
-				dif[i][j] = dif[i - 1][j - 1];
-			else
-				dif[i][j] = min(dif[i][j - 1], dif[i - 1][j], dif[i - 1][j - 1]) + 1;
-		}
-	}
-	float similarity = 1 - (float)dif[len1][len2] / std::max(len1, len2);
-	//百分比
-	similarity *= 100;
-
-	for (int i = 0; i < len1 + 1; i++)
-		delete[] dif[i];
-	
-	return (int)similarity;
-}
-
 //从异常堆栈信息中提取出模块信息,测试，初始化
 void MyHttpHandler::InsertModulesInfo(string crash_context)
 {
@@ -424,26 +443,14 @@ void MyHttpHandler::InsertModulesInfo(string crash_context)
 	}
 }
 
-void MyHttpHandler::InsertDataToDataBase(const string crash_id, const string fixed, const string app_version
+//插入数据到数据库中
+void MyHttpHandler::InsertDataToDataBase(string tableName, const string crash_id, const string fixed, const string app_version
 	, const string first_crash_date_time, const string last_crash_date_time, const string crash_context_digest,
 	const string crash_context)
 {
-	////从异常信息中提取出开发者的id
-	////第一次出现等号的位置
-	//int equalIndex = crash_context_digest.find_first_of("=");
-	////第一次出现左括号的位置
-	//int leftIndex = crash_context_digest.find_first_of("(");
-	////开发者id的长度
-	//int idLength = leftIndex - 1 - equalIndex;
-	//string id;
-	//if (idLength > 0)
-	//	id = crash_context_digest.substr(equalIndex + 1, idLength);
-	//else
-	//	id = "";
-
 	//首先判断数据库中是否已存在该异常数据
 	sql::PreparedStatement *pstmt;
-	string sqlStatement = "select crash_context from errorinfo where crash_id = \"" + crash_id + "\"";
+	string sqlStatement = "select crash_context from " + tableName + " where crash_id = \"" + crash_id + "\"";
 	pstmt = con->prepareStatement(sqlStatement);
 	sql::ResultSet *res;
 	res = pstmt->executeQuery();
@@ -461,7 +468,9 @@ void MyHttpHandler::InsertDataToDataBase(const string crash_id, const string fix
 
 		//使用replace语句，如果数据库中有相同主键的数据，则更新数据库信息
 		//pstmt = con->prepareStatement("REPLACE INTO ErrorInfo(crash_id,developerid,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)");
-		pstmt = con->prepareStatement("INSERT INTO ErrorInfo(crash_id,developer,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)");
+		sqlStatement = "INSERT INTO " + tableName 
+			+ "(crash_id,developer,fixed,app_version,first_crash_date_time,last_crash_date_time,crash_context_digest,crash_context) VALUES(?,?,?,?,?,?,?,?)";
+		pstmt = con->prepareStatement(sqlStatement);
 
 		pstmt->setString(1, crash_id);
 		pstmt->setString(2, developerName);
@@ -478,7 +487,8 @@ void MyHttpHandler::InsertDataToDataBase(const string crash_id, const string fix
 	}
 }
 
-int MyHttpHandler::GetErrorList(string offset)
+//从myou获取异常列表
+int MyHttpHandler::GetErrorList(string offset, string appkey, string start_date, string end_date)
 {
 	analyzePage = "http://myou.cvte.com/api/in/analyze/" + appkey
 		+ "/crash_list?platform=windows_app&app_version=&start_date=" + start_date
@@ -582,7 +592,7 @@ int MyHttpHandler::GetErrorList(string offset)
 	}
 	return 0;
 }
-
+//获取登陆的token
 int MyHttpHandler::GetLoginToken()
 {
 	try
@@ -688,6 +698,41 @@ int MyHttpHandler::GetLoginToken()
 	return 0;
 }
 
+//简单字符串对比，返回相似度,测试
+int MyHttpHandler::Levenshtein(string str1, string str2)
+{
+	int len1 = str1.length();
+	int len2 = str2.length();
+	int **dif = new int*[len1 + 1];
+	for (int i = 0; i < len1 + 1; i++)
+	{
+		dif[i] = new int[len2 + 1];
+		memset(dif[i], 0, sizeof(int)*(len2 + 1));
+	}
+	for (int i = 0; i <= len1; i++)
+		dif[i][0] = i;
+	for (int i = 0; i <= len2; i++)
+		dif[0][i] = i;
+
+	for (int i = 1; i <= len1; i++)
+	{
+		for (int j = 1; j <= len2; j++)
+		{
+			if (str1[i - 1] == str2[j - 1])
+				dif[i][j] = dif[i - 1][j - 1];
+			else
+				dif[i][j] = min(dif[i][j - 1], dif[i - 1][j], dif[i - 1][j - 1]) + 1;
+		}
+	}
+	float similarity = 1 - (float)dif[len1][len2] / std::max(len1, len2);
+	//百分比
+	similarity *= 100;
+
+	for (int i = 0; i < len1 + 1; i++)
+		delete[] dif[i];
+
+	return (int)similarity;
+}
 //求三个数的最小值
 int MyHttpHandler::min(int a, int b, int c) {
 	if (a > b) {
@@ -710,6 +755,7 @@ int MyHttpHandler::min(int a, int b, int c) {
 	}
 }
 
+//把获取到的数据写到文件中，方便测试查看
 void MyHttpHandler::writeFile(const char *src, const char *fileName)
 {
 	std::ofstream out(fileName, std::ios::out);
@@ -724,7 +770,7 @@ void MyHttpHandler::writeFile(const char *src, const char *fileName)
 	out.close();
 }
 
-//根据异常信息提取开发者信息
+//根据异常信息提取开发者信息，测试
 void MyHttpHandler::InsertDeveloperInfo(string info)
 {
 	//第一次出现等号的位置

@@ -12,14 +12,14 @@ const string ETX = "\x3";       //收到
 
 RWHandler::RWHandler(io_service& ios) : m_sock(ios), sendIds(9)
 {
-	httphandler = new MyHttpHandler();
+	//httphandler = new MyHttpHandler();
 	offSet = 0;
 	dataToSendIndex = 0;
 	initErrorInfo = false;
 	initDeveloper = false;
-	appKey = "";
+	/*appKey = "";
 	start_date = "";
-	end_date = "";
+	end_date = "";*/
 
 	int current = 0;
 	std::generate_n(sendIds.begin(), 9, [&current] {return ++current; });
@@ -29,6 +29,8 @@ RWHandler::RWHandler(io_service& ios) : m_sock(ios), sendIds(9)
 	con = dirver->connect("localhost", "root", "123456");
 	//选择mydata数据库
 	con->setSchema("CrashKiller");
+
+	InitProjectsTables();
 }
 
 RWHandler::~RWHandler()
@@ -180,19 +182,42 @@ int RWHandler::GetConnId() const
 	return m_connId;
 }
 
-string RWHandler::GetAppKey()
-{
-	return appKey;
-}
+//string RWHandler::GetAppKey()
+//{
+//	//return appKey;
+//}
+//
+//string RWHandler::GetStartDate()
+//{
+//	//return start_date;
+//}
+//
+//string RWHandler::GetEndDate()
+//{
+//	//return end_date;
+//}
 
-string RWHandler::GetStartDate()
+//从项目配置文件中获取appkey
+void RWHandler::InitProjectsTables()
 {
-	return start_date;
-}
+	//读取配置文件中appkey信息
+	std::ifstream t("ProjectsConfigure.txt");
+	if (!t)
+	{
+		std::cout << "打开项目Appkey配置文件失败！" << std::endl;
+		return;
+	}
+	std::stringstream buffer;
+	buffer << t.rdbuf();
 
-string RWHandler::GetEndDate()
-{
-	return end_date;
+	ptree pt, pt1, pt2;
+	read_json<ptree>(buffer, pt);
+	pt1 = pt.get_child("projects");
+	for (ptree::iterator it = pt1.begin(); it != pt1.end(); ++it)
+	{
+		pt2 = it->second;
+		tables.push_back(pt2.get<string>("tableName"));
+	}
 }
 
 /*void setSendData(const char* str)
@@ -455,7 +480,8 @@ void RWHandler::GetDeveloperInfo()
 	delete res;
 }
 
-//从数据库中获取数据并把数据转为JSON格式上
+//从数据库中获取数据并把数据转为JSON格式上, 此处目前因为只有一个appkey
+//该函数应该传入appkey来找到数据库中对于的表，现在有问题
 void RWHandler::TransferDataToJson()
 {
 	dataInJson.clear();
@@ -467,8 +493,9 @@ void RWHandler::TransferDataToJson()
 	stmt = con->createStatement();
 
 	string result = "";
-	//从errorinfo表中获取所有信息
-	res = stmt->executeQuery("select * from errorinfo where fixed=\"false\"");
+	//从数据库表中获取所有信息
+	string sqlStatement = "select * from " + tables[0] + " where fixed=\"false\"";
+	res = stmt->executeQuery(sqlStatement);
 	//ptree pt3, pt4;
 	//循环遍历
 	while (res->next())
