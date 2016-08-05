@@ -19,6 +19,15 @@ using namespace boost::property_tree;
 using namespace boost::gregorian;
 using boost::asio::ip::tcp;
 
+//每次请求从萌友获取数据的最大数量,字符型用来拼接HTTP请求，整型用来判断是否达到最大值
+const string LIMIT_NUM = "50";
+const int MAX_LIMIT = 50;
+
+//从萌友平台获取异常数据时的默认appKey、start_date和end_date
+const string defaultAppKey = "9e4b010a0d51f6e020ead6ce37bad33896a00f90";
+const string defaultStartDate = "2016-01-1";
+const string defaultEndDate = "2016-07-26";
+
 //UTF-8转GB2312，测试
 char* U2G(const char* utf8)
 {
@@ -107,15 +116,6 @@ void MyHttpHandler::setEndDate(string date)
 	end_date = date;
 }
 
-void MyHttpHandler::PostHttpRequest()
-{
-	errorList = "";
-	GetLoginToken();
-	std::cout << "Get Token finish!" << std::endl;
-	GetErrorList();
-	std::cout << "Get Error List finish!" << std::endl;
-}
-
 //解析从萌友获取的数据，并插入数据库中，如果数据中有该异常的信息，则不再插入
 //只插入新获取到的异常信息
 void MyHttpHandler::ParseJsonAndInsertToDatabase()
@@ -124,6 +124,13 @@ void MyHttpHandler::ParseJsonAndInsertToDatabase()
 	//stmt = con->createStatement();
 	//stmt->execute("delete from errorinfo");
 	//delete stmt;
+	
+	//统计该请求是否已达到最大值，limit
+	count = 0;
+	//如果获取的异常数列为空，则证明已接收完成
+	if (errorList == "")
+		return;
+
 	con->setAutoCommit(0);
 	ptree pt, pt1, pt2;
 	std::stringstream stream;
@@ -140,32 +147,47 @@ void MyHttpHandler::ParseJsonAndInsertToDatabase()
 			pt2.get<string>("app_version"), pt2.get<string>("first_crash_date_time"),
 			pt2.get<string>("last_crash_date_time"), pt2.get<string>("crash_context_digest"), pt2.get<string>("crash_context"));
 
+		count++;
 		//测试
 		//InsertModulesInfo(pt2.get<string>("crash_context"));
 		//InsertDeveloperInfo(p1.get<string>("crash_context_digest"));
 	}
 
 	con->commit();
+}
 
-	//int totalCount = pt.get<int>("totalCount");
-	//std::cout << "totalCount:" << totalCount << std::endl;
-	//p1 = pt.get_child("data");
-	//for (ptree::iterator it = p1.begin(); it != p1.end(); ++it)
-	//{
-	//	p2 = it->second;
-	//	std::cout << "context_digest:" << p2.get<string>("context_digest") << std::endl;
-	//	std::cout << "raw_crash_record_id:" << p2.get<int>("raw_crash_record_id") << std::endl;
-	//	std::cout << "created_at:" << p2.get<string>("created_at") << std::endl;
-	//	std::cout << "app_version:" << p2.get<string>("app_version") << std::endl;
-	//	/*InsertDataToDataBase(con, 
-	//		i,
-	//		p2.get<string>("context_digest"), 
-	//		p2.get<string>("raw_crash_record_id"),
-	//		p2.get<string>("created_at"),
-	//		p2.get<string>("app_version"));*/
-	//	i++;
-	//}
+//向萌友请求数据，并写入数据库
+void MyHttpHandler::excuteAction()
+{
+	setAppKey(defaultAppKey);
+	setStartDate(defaultStartDate);
+	setEndDate(defaultEndDate);
+	//PostHttpRequest();
+	
+	//第一次向萌友请求数据，最大数量为50个
+	errorList = "";
+	GetLoginToken();
+	std::cout << "Get Token finish!" << std::endl;
+	//第一次请求偏移量为0，从第一个位置开始获取
+	GetErrorList("0");
+	//解析第一次获取的数据，并写入数据库中
+	ParseJsonAndInsertToDatabase();
 
+	//计算偏移量
+	int offset = 1;
+	//如果接收达到最大限制，则修改offset，继续请求查看是否还有别的数据
+	while (count >= MAX_LIMIT)
+	{
+		errorList = "";
+		std::stringstream offsetStr;
+		int offsetIndex = MAX_LIMIT*offset;
+		offsetStr << offsetIndex;
+		//计算偏移量，从偏移量处开始获取
+		GetErrorList(offsetStr.str());
+		ParseJsonAndInsertToDatabase();
+		++offset;
+	}
+	std::cout << "Get Error List finish!" << std::endl;
 }
 
 //根据异常中堆栈的模块信息的权重智能分配异常，返回分配的开发者名字
@@ -260,7 +282,7 @@ string MyHttpHandler::AutoDistributeCrash(string crash_context)
 	return developerName;
 }
 
-//把同一个人的异常信息进行初步的分类
+//把同一个人的异常信息进行初步的分类,未完成
 void MyHttpHandler::AutoClassifyCrash(string developer)
 {
 	/*sql::PreparedStatement *pstmt;
@@ -451,12 +473,12 @@ void MyHttpHandler::InsertDataToDataBase(const string crash_id, const string fix
 	}
 }
 
-int MyHttpHandler::GetErrorList()
+int MyHttpHandler::GetErrorList(string offset)
 {
 	analyzePage = "http://myou.cvte.com/api/in/analyze/" + appkey
 		+ "/crash_list?platform=windows_app&app_version=&start_date=" + start_date
 		+ "&end_date=" + end_date
-		+ "&limit=50&offset=0&fixed=false";
+		+ "&limit=" + LIMIT_NUM + "&offset=" + offset + "&fixed=false";
 	try
 	{
 		boost::asio::io_service io_service;

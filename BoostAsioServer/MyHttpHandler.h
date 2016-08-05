@@ -26,12 +26,10 @@ public:
 	void setStartDate(string date);
 	//设置异常数据的结束日期
 	void setEndDate(string date);
-	//发送Http请求登陆，并返回登陆成功的token
-	void PostHttpRequest();
-	//解析异常数据列表，并写入数据库中
-	void ParseJsonAndInsertToDatabase();
 	//把同一个人的异常信息进行初步的分类
 	void AutoClassifyCrash(string developer);
+	//向萌友请求数据，并写入数据库
+	void excuteAction();
 
 private:
 	//执行插入语句，向数据中插入异常数据信息
@@ -40,9 +38,11 @@ private:
 		, const string last_crash_date_time, const string crash_context_digest, const string crash_context);
 
 	//获取异常数据列表
-	int GetErrorList();
+	int GetErrorList(string offset);
 	//获取登陆萌友的token
 	int GetLoginToken();
+	//解析异常数据列表，并写入数据库中
+	void ParseJsonAndInsertToDatabase();
 	//把数据写入到文本文件中方便查看，测试
 	void writeFile(const char *src, const char *fileName);
 
@@ -70,6 +70,8 @@ private:
 
 	string token;                 //登陆成功时返回的token
 	string errorList;             //异常数据列表，JSON格式
+								  
+	int count;                    //统计该请求是否已达到最大值，limit
 
 	//连接数据库
 	sql::Driver *dirver;

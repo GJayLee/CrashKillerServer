@@ -37,11 +37,7 @@ struct CHelloWorld_Service
 		
 		httphandler = new MyHttpHandler();
 		//测试使用
-		/*httphandler->setAppKey(defaultAppKey);
-		httphandler->setStartDate(defaultStartDate);
-		httphandler->setEndDate(defaultEndDate);
-		httphandler->PostHttpRequest();
-		httphandler->ParseJsonAndInsertToDatabase();*/
+		httphandler->excuteAction();
 
 		//此处的http请求应改为每隔一段时间触发
 		m_timer.async_wait(boost::bind(&CHelloWorld_Service::wait_handler, this));
@@ -173,11 +169,11 @@ private:
 		if (end_date == "")
 			end_date = defaultEndDate;
 		//此处的http请求应改为每隔一段时间触发
-		httphandler->setAppKey(appKey);
+		/*httphandler->setAppKey(appKey);
 		httphandler->setStartDate(start_date);
 		httphandler->setEndDate(end_date);
 		httphandler->PostHttpRequest();
-		httphandler->ParseJsonAndInsertToDatabase();
+		httphandler->ParseJsonAndInsertToDatabase();*/
 
 		m_timer.expires_at(m_timer.expires_at() + boost::posix_time::seconds(UPDATE_TIME));
 		m_timer.async_wait(boost::bind(&CHelloWorld_Service::wait_handler, this));
