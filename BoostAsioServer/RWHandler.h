@@ -74,6 +74,8 @@ private:
 	void read_handler(const boost::system::error_code& ec, boost::shared_ptr<std::vector<char> > str);
 	//处理连接错误异常
 	void HandleError(const boost::system::error_code& ec);
+	//每隔10s调用重发
+	void wait_handler();
 
 	//根据传输协议拼接发送消息
 	string GetSendData(string flag, string msg);
@@ -113,6 +115,9 @@ private:
 
 	std::vector<string> tables;
 
-	bool initErrorInfo;
-	bool initDeveloper;
+	bool initErrorInfo;       //是否发送异常数据
+	bool initDeveloper;       //是否发送开发者信息
+
+	deadline_timer m_timer;
+	bool isReSend;
 };

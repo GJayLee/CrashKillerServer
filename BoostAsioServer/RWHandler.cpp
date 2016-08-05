@@ -10,7 +10,7 @@ const string STX = "\x2";       //正文开始
 const string EOT = "\x4";       //正文结束
 const string ETX = "\x3";       //收到
 
-RWHandler::RWHandler(io_service& ios) : m_sock(ios), sendIds(9)
+RWHandler::RWHandler(io_service& ios) : m_sock(ios), sendIds(9), m_timer(ios, boost::posix_time::seconds(10))
 {
 	//httphandler = new MyHttpHandler();
 	offSet = 0;
@@ -31,6 +31,9 @@ RWHandler::RWHandler(io_service& ios) : m_sock(ios), sendIds(9)
 	con->setSchema("CrashKiller");
 
 	InitProjectsTables();
+
+	//发送完成后开启异步等待
+	m_timer.async_wait(boost::bind(&RWHandler::wait_handler, this));
 }
 
 RWHandler::~RWHandler()
@@ -158,6 +161,8 @@ void RWHandler::HandleWrite()
 			}
 		}
 	}
+	//设置重发暂时为true，如果超时则重发，收到返回设为false
+	isReSend = true;
 }
 
 ip::tcp::socket& RWHandler::GetSocket()
@@ -233,13 +238,10 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 	else
 	{
 		//客户端请求初始化异常数据时调用
-		//if (initErrorInfo || strcmp(&(*str)[0], "Get Expect") == 0)
 		if (initErrorInfo || strcmp(&(*str)[2], "Get Expect") == 0)
 		{
-			//HandleWrite();
 			if (!initErrorInfo)
 			{
-				//GetDatabaseData();
 				boost::system::error_code ec;
 				string sendStr = ETX + (*str)[1] + "Receive";
 				write(m_sock, buffer(sendStr, sendStr.size()), ec);
@@ -251,16 +253,18 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 				dataToSendIndex = 0;
 				offSet = 0;
 				HandleWrite();
+				
 			}
 			else
 			{
 				if ((*str)[0] == ETX[0])
 				{
+					//收到返回，设置重发为false
+					isReSend = false;
 					int sendId = (*str)[1] - '0';
 					RecyclSendId(sendId);
 					if ((offSet + SEND_SIZE) > dataInJson[dataToSendIndex].size())
 					{
-						//std::cout << (*str)[1] << "发送完成！" << std::endl;
 						std::cout << dataToSendIndex << "发送完成！" << std::endl;
 						++dataToSendIndex;
 						//判断是否还有下一条异常，如果有则继续发送，无则关闭连接
@@ -268,6 +272,9 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 						{
 							offSet = 0;
 							HandleWrite();
+							isReSend = true;
+							//发送完成后开启异步等待
+							m_timer.async_wait(boost::bind(&RWHandler::wait_handler, this));
 						}
 						else
 						{
@@ -291,11 +298,6 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 						HandleWrite();
 					}
 				}
-				else
-				{
-					std::cout << "没有接收到返回，重发消息!" << std::endl;
-					HandleWrite();
-				}
 			}
 		}
 		//客户端发送获取开发者信息时
@@ -318,6 +320,8 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 			{
 				if ((*str)[0] == ETX[0])
 				{
+					//收到返回，设置重发为false
+					isReSend = false;
 					int sendId = (*str)[1] - '0';
 					RecyclSendId(sendId);
 					if ((offSet + SEND_SIZE) > developerInfo.size())
@@ -334,11 +338,6 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 						offSet = offSet + SEND_SIZE;
 						HandleWrite();
 					}
-				}
-				else
-				{
-					std::cout << "没有接收到返回，重发消息!" << std::endl;
-					HandleWrite();
 				}
 			}
 		}
@@ -387,6 +386,19 @@ void RWHandler::HandleError(const boost::system::error_code& ec)
 	//std::cout << ec.message() << std::endl;
 	if (m_callbackError)
 		m_callbackError(m_connId);
+}
+
+//每隔10s调用重发
+void RWHandler::wait_handler()
+{
+	if (isReSend&&(initDeveloper||initErrorInfo))
+	{
+		std::cout << "没有接收到返回，重发消息!" << std::endl;
+		HandleWrite();
+	}
+
+	m_timer.expires_at(m_timer.expires_at() + boost::posix_time::seconds(10));
+	m_timer.async_wait(boost::bind(&RWHandler::wait_handler, this));
 }
 
 //从数据库中获取开发者信息并转换为JSON格式
