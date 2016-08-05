@@ -182,21 +182,6 @@ int RWHandler::GetConnId() const
 	return m_connId;
 }
 
-//string RWHandler::GetAppKey()
-//{
-//	//return appKey;
-//}
-//
-//string RWHandler::GetStartDate()
-//{
-//	//return start_date;
-//}
-//
-//string RWHandler::GetEndDate()
-//{
-//	//return end_date;
-//}
-
 //从项目配置文件中获取appkey
 void RWHandler::InitProjectsTables()
 {
@@ -220,16 +205,7 @@ void RWHandler::InitProjectsTables()
 	}
 }
 
-/*void setSendData(const char* str)
-{
-sendData = new char[strlen(str) + 1];
-memset(sendData, 0, sizeof(char)*(strlen(str) + 1));
-strcpy(sendData, str);
-offSet = 0;
-}*/
-
 // 异步写操作完成后write_handler触发
-//void write_handler(const boost::system::error_code& ec, boost::shared_ptr<std::string> str)
 void RWHandler::write_handler(const boost::system::error_code& ec)
 {
 	if (ec)
@@ -366,17 +342,10 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 				}
 			}
 		}
-		//客户端返回更新内容，如分配给哪个用户，异常是否已解决时调用
-		//else if (strcmp(&(*str)[2], "Update") == 0)
-		//{
-		//	//UpdateDatabase("0533e5d3-7bf6-4a75-95c9-b5b3b3264880", "18520147781", "false");
-		//	HandleRead();
-		//}
-		//其他情况，测试
 		else
 		{
 			std::cout << "接收消息：" << &(*str)[0] << std::endl;
-			//从客户端收到数据更新数据库
+			//客户端返回更新内容，如分配给哪个用户，异常是否已解决时调用
 			char command[3] = { 0 };
 			for (int i = 2; i < 4; i++)
 				command[i-2] = (*str)[i];
@@ -390,34 +359,6 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 			}
 			else
 				HandleRead();
-			
-			//char command[7] = { 0 };
-			//char msg[100] = { 0 };
-			//for (int i = 0; i < 6; i++)
-			//{
-			//	command[i] = (*str)[i];
-			//	msg[i] = (*str)[i];
-			//}
-			//for (int i = 6; i < str->size(); i++)
-			//	msg[i] = (*str)[i];
-			//if (strcmp(command, "Update") == 0)
-			//{
-			//	//std::cout << "接收消息：" << command << std::endl;
-			//	std::vector<std::string> vec;
-			//	boost::split(vec, msg, boost::is_any_of("+"));
-			//	appKey = vec[1];
-			//	start_date = vec[2];
-			//	end_date = vec[3];
-			//	httphandler->setAppKey(appKey);
-			//	httphandler->setStartDate(start_date);
-			//	httphandler->setEndDate(end_date);
-			//	httphandler->PostHttpRequest();
-			//	//setSendData(errorList.c_str());
-			//	httphandler->ParseJsonAndInsertToDatabase();
-			//	offSet = 0;
-			//	initErrorInfo = true;
-			//	HandleWrite();
-			//}
 		}
 	}
 }

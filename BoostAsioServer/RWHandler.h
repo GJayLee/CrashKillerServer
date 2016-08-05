@@ -115,6 +115,4 @@ private:
 
 	bool initErrorInfo;
 	bool initDeveloper;
-
-	//MyHttpHandler *httphandler;
 };
