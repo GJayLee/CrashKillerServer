@@ -25,8 +25,8 @@ const int MAX_LIMIT = 50;
 
 //从萌友平台获取异常数据时的默认appKey、start_date和end_date
 const string defaultAppKey = "9e4b010a0d51f6e020ead6ce37bad33896a00f90";
-const string defaultStartDate = "2016-01-1";
-const string defaultEndDate = "2016-07-26";
+const string defaultStartDate = "2016-08-04";
+const string defaultEndDate = "2016-08-05";
 
 //UTF-8转GB2312，测试
 char* U2G(const char* utf8)
@@ -60,6 +60,11 @@ char* G2U(const char* gb2312)
 
 MyHttpHandler::MyHttpHandler()
 {
+	//设置默认请求的appkey、start_date和end_date
+	appkey = defaultAppKey;
+	start_date = defaultStartDate;
+	end_date = defaultEndDate;
+	//设置Header信息
 	host = "myou.cvte.com";
 	loginPage = "http://myou.cvte.com/api/in/auth/login";
 	data = "{\"email\":\"lindexi@cvte.com\",\"password\":\"11111111\"}";
@@ -78,6 +83,10 @@ MyHttpHandler::MyHttpHandler()
 }
 MyHttpHandler::MyHttpHandler(string a, string s, string e) : appkey(a), start_date(s), end_date(e)
 {
+	//设置默认请求的appkey、start_date和end_date
+	appkey = defaultAppKey;
+	start_date = defaultStartDate;
+	end_date = defaultEndDate;
 	//设置Header信息
 	host = "myou.cvte.com";
 	loginPage = "http://myou.cvte.com/api/in/auth/login";
@@ -158,14 +167,10 @@ void MyHttpHandler::ParseJsonAndInsertToDatabase()
 
 //向萌友请求数据，并写入数据库
 void MyHttpHandler::excuteAction()
-{
-	setAppKey(defaultAppKey);
-	setStartDate(defaultStartDate);
-	setEndDate(defaultEndDate);
-	//PostHttpRequest();
-	
+{	
 	//第一次向萌友请求数据，最大数量为50个
 	errorList = "";
+	token = "";
 	GetLoginToken();
 	std::cout << "Get Token finish!" << std::endl;
 	//第一次请求偏移量为0，从第一个位置开始获取
@@ -330,7 +335,7 @@ void MyHttpHandler::AutoClassifyCrash(string developer)
 	delete res;
 }
 
-//简单字符串对比，返回相似度
+//简单字符串对比，返回相似度,测试
 int MyHttpHandler::Levenshtein(string str1, string str2)
 {
 	int len1 = str1.length();

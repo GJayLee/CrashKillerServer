@@ -29,9 +29,6 @@
     <ClInclude Include="RWHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="Message.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="MyHttpHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>

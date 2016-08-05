@@ -5,6 +5,8 @@
 #include <boost/bind.hpp>
 #include <boost\unordered_map.hpp>
 #include <boost/smart_ptr.hpp>
+//日期
+#include <boost\date_time\gregorian\gregorian.hpp>
 
 #include "RWHandler.h"
 #include "MyHttpHandler.h"
@@ -16,13 +18,8 @@ using ip::tcp;
 //最大连接数
 const int MaxConnectionNum = 65536;
 const int MaxRecvSize = 65536;
-//设置服务器更新时间为30分钟
-const int UPDATE_TIME = 1800;
-
-//从萌友平台获取异常数据时的默认appKey、start_date和end_date
-string defaultAppKey = "9e4b010a0d51f6e020ead6ce37bad33896a00f90";
-string defaultStartDate = "2016-01-1";
-string defaultEndDate = "2016-07-26";
+//设置服务器更新时间为30分钟（1小时）
+const int UPDATE_TIME = 3600;
 
 struct CHelloWorld_Service
 {
@@ -36,8 +33,8 @@ struct CHelloWorld_Service
 		httphandler->ParseJsonAndInsertToDatabase();*/
 		
 		httphandler = new MyHttpHandler();
-		//测试使用
-		httphandler->excuteAction();
+		//测试初始化使用
+		//httphandler->excuteAction();
 
 		//此处的http请求应改为每隔一段时间触发
 		m_timer.async_wait(boost::bind(&CHelloWorld_Service::wait_handler, this));
@@ -158,22 +155,22 @@ struct CHelloWorld_Service
 	}*/
 
 private:
-	//每隔30分钟调用一次http请求更新数据
+	//每隔30分钟调用一次http请求更新数据,请求区间为今天和前一天
 	void wait_handler()
 	{
-		//如果appkey、start_date和end_date为空，则赋予它们一个默认值进行更新
-		if (appKey == "")
-			appKey = defaultAppKey;
-		if (start_date == "")
-			start_date = defaultStartDate;
-		if (end_date == "")
-			end_date = defaultEndDate;
+		//获取当前日期和前一天
+		boost::gregorian::date d(boost::gregorian::day_clock::local_day());
+		//今天
+		string today = boost::gregorian::to_iso_extended_string(d);
+		boost::gregorian::day_iterator d_iter(d);
+		--d_iter;
+		//昨天
+		string yesterday = boost::gregorian::to_iso_extended_string(*d_iter);
+
 		//此处的http请求应改为每隔一段时间触发
-		/*httphandler->setAppKey(appKey);
-		httphandler->setStartDate(start_date);
-		httphandler->setEndDate(end_date);
-		httphandler->PostHttpRequest();
-		httphandler->ParseJsonAndInsertToDatabase();*/
+		httphandler->setStartDate(yesterday);
+		httphandler->setEndDate(today);
+		httphandler->excuteAction();
 
 		m_timer.expires_at(m_timer.expires_at() + boost::posix_time::seconds(UPDATE_TIME));
 		m_timer.async_wait(boost::bind(&CHelloWorld_Service::wait_handler, this));

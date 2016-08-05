@@ -4,9 +4,6 @@
 
 #include "RWHandler.h"
 
-//const int MAX_IP_PACK_SIZE = 100;
-//const int HEAD_LEN = 1;
-
 const int SEND_SIZE = 65535;
 
 const string STX = "\x2";       //正文开始
@@ -205,8 +202,6 @@ memset(sendData, 0, sizeof(char)*(strlen(str) + 1));
 strcpy(sendData, str);
 offSet = 0;
 }*/
-
-
 
 // 异步写操作完成后write_handler触发
 //void write_handler(const boost::system::error_code& ec, boost::shared_ptr<std::string> str)
@@ -473,7 +468,7 @@ void RWHandler::TransferDataToJson()
 
 	string result = "";
 	//从errorinfo表中获取所有信息
-	res = stmt->executeQuery("select * from errorinfo");
+	res = stmt->executeQuery("select * from errorinfo where fixed=\"false\"");
 	//ptree pt3, pt4;
 	//循环遍历
 	while (res->next())
