@@ -10,7 +10,7 @@ const string STX = "\x2";       //正文开始
 const string EOT = "\x4";       //正文结束
 const string ETX = "\x3";       //收到
 
-RWHandler::RWHandler(io_service& ios) : m_sock(ios), sendIds(9), m_timer(ios, boost::posix_time::seconds(10))
+RWHandler::RWHandler(io_service& ios) : m_sock(ios), sendIds(9), m_timer(ios)
 {
 	//httphandler = new MyHttpHandler();
 	offSet = 0;
@@ -32,7 +32,7 @@ RWHandler::RWHandler(io_service& ios) : m_sock(ios), sendIds(9), m_timer(ios, bo
 
 	InitProjectsTables();
 
-	//发送完成后开启异步等待
+	//开启异步等待
 	m_timer.async_wait(boost::bind(&RWHandler::wait_handler, this));
 }
 
@@ -163,6 +163,7 @@ void RWHandler::HandleWrite()
 	}
 	//设置重发暂时为true，如果超时则重发，收到返回设为false
 	isReSend = true;
+	m_timer.expires_from_now(boost::posix_time::seconds(10));
 }
 
 ip::tcp::socket& RWHandler::GetSocket()
@@ -272,9 +273,6 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 						{
 							offSet = 0;
 							HandleWrite();
-							isReSend = true;
-							//发送完成后开启异步等待
-							m_timer.async_wait(boost::bind(&RWHandler::wait_handler, this));
 						}
 						else
 						{
@@ -381,6 +379,7 @@ string RWHandler::GetSendData(string flag, string msg)
 
 void RWHandler::HandleError(const boost::system::error_code& ec)
 {
+	m_timer.expires_at(boost::posix_time::pos_infin);
 	CloseSocket();
 	std::cout << "断开连接" << m_connId << std::endl;
 	//std::cout << ec.message() << std::endl;
@@ -396,9 +395,6 @@ void RWHandler::wait_handler()
 		std::cout << "没有接收到返回，重发消息!" << std::endl;
 		HandleWrite();
 	}
-
-	m_timer.expires_at(m_timer.expires_at() + boost::posix_time::seconds(10));
-	m_timer.async_wait(boost::bind(&RWHandler::wait_handler, this));
 }
 
 //从数据库中获取开发者信息并转换为JSON格式
