@@ -119,5 +119,6 @@ private:
 	bool initDeveloper;       //是否发送开发者信息
 
 	deadline_timer m_timer;
+	bool isDisConnected;
 	bool isReSend;
 };

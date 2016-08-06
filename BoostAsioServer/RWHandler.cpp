@@ -21,6 +21,8 @@ RWHandler::RWHandler(io_service& ios) : m_sock(ios), sendIds(9), m_timer(ios)
 	start_date = "";
 	end_date = "";*/
 
+	isDisConnected = false;
+
 	int current = 0;
 	std::generate_n(sendIds.begin(), 9, [&current] {return ++current; });
 
@@ -93,6 +95,7 @@ void RWHandler::HandleWrite()
 		//没有超过最大缓冲区，可以完整发送
 		if (dataInJson[dataToSendIndex].size() <= SEND_SIZE)
 		{
+			std::cout << "发送" << dataToSendIndex << std::endl;
 			//添加结束符告诉客户端这是该data的最后一段
 			string sendStr = GetSendData(EOT, dataInJson[dataToSendIndex]);
 			m_sock.async_write_some(buffer(sendStr.c_str(), sendStr.size()),
@@ -121,6 +124,9 @@ void RWHandler::HandleWrite()
 					boost::bind(&RWHandler::write_handler, this, placeholders::error));
 			}
 		}
+		//从发送起计算，10s后没接收到返回就重发
+		isReSend = true;
+		m_timer.expires_from_now(boost::posix_time::seconds(10));
 
 		/*int sendSize = 0;
 		if (strlen(sendData) - offSet < SEND_SIZE)
@@ -160,10 +166,10 @@ void RWHandler::HandleWrite()
 					boost::bind(&RWHandler::write_handler, this, placeholders::error));
 			}
 		}
+		//从发送起计算，10s后没接收到返回就重发
+		isReSend = true;
+		m_timer.expires_from_now(boost::posix_time::seconds(10));
 	}
-	//设置重发暂时为true，如果超时则重发，收到返回设为false
-	isReSend = true;
-	m_timer.expires_from_now(boost::posix_time::seconds(10));
 }
 
 ip::tcp::socket& RWHandler::GetSocket()
@@ -254,7 +260,6 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 				dataToSendIndex = 0;
 				offSet = 0;
 				HandleWrite();
-				
 			}
 			else
 			{
@@ -263,7 +268,7 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 					//收到返回，设置重发为false
 					isReSend = false;
 					int sendId = (*str)[1] - '0';
-					RecyclSendId(sendId);
+					//RecyclSendId(sendId);
 					if ((offSet + SEND_SIZE) > dataInJson[dataToSendIndex].size())
 					{
 						std::cout << dataToSendIndex << "发送完成！" << std::endl;
@@ -291,7 +296,6 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 					}
 					else
 					{
-						//std::cout << "接收消息：" << &(*str)[0] << std::endl;
 						offSet = offSet + SEND_SIZE;
 						HandleWrite();
 					}
@@ -321,7 +325,7 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 					//收到返回，设置重发为false
 					isReSend = false;
 					int sendId = (*str)[1] - '0';
-					RecyclSendId(sendId);
+					//RecyclSendId(sendId);
 					if ((offSet + SEND_SIZE) > developerInfo.size())
 					{
 						std::cout << "开发者信息发送完成！" << std::endl;
@@ -363,14 +367,14 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 //根据传输协议拼接发送消息     head+count+data
 string RWHandler::GetSendData(string flag, string msg)
 {
-	int sendId = sendIds.front();
+	/*int sendId = sendIds.front();
 	sendIds.pop_front();
 	std::stringstream ss;
 	ss << sendId;
 	string indexStr = ss.str();
-	sendIDArray[sendId] = true;
+	sendIDArray[sendId] = true;*/
 
-	string data = flag + indexStr + msg;
+	string data = flag + "\x1" + msg;
 
 	//ss.clear();
 
@@ -379,7 +383,9 @@ string RWHandler::GetSendData(string flag, string msg)
 
 void RWHandler::HandleError(const boost::system::error_code& ec)
 {
-	m_timer.expires_at(boost::posix_time::pos_infin);
+	m_timer.cancel();
+	isDisConnected = true;
+	//m_timer.expires_at(boost::posix_time::pos_infin);
 	CloseSocket();
 	std::cout << "断开连接" << m_connId << std::endl;
 	//std::cout << ec.message() << std::endl;
@@ -390,11 +396,15 @@ void RWHandler::HandleError(const boost::system::error_code& ec)
 //每隔10s调用重发
 void RWHandler::wait_handler()
 {
-	if (isReSend&&(initDeveloper||initErrorInfo))
+	if (isDisConnected)
+		return;
+
+	if (m_timer.expires_at() <= deadline_timer::traits_type::now()&&isReSend)
 	{
 		std::cout << "没有接收到返回，重发消息!" << std::endl;
 		HandleWrite();
 	}
+	m_timer.async_wait(boost::bind(&RWHandler::wait_handler, this));
 }
 
 //从数据库中获取开发者信息并转换为JSON格式
@@ -510,7 +520,7 @@ void RWHandler::UpdateDatabase(string clientData)
 
 		sql::Statement *stmt;
 		stmt = con->createStatement();
-		string sqlStateMent = "UPDATE" + tables[0] +" SET developer = \"" + developer
+		string sqlStateMent = "UPDATE " + tables[0] +" SET developer = \"" + developer
 			+ "\",fixed = \"" + fixed + "\" WHERE crash_id = \"" + crash_id + "\"";
 		stmt->execute(sqlStateMent);
 
@@ -523,7 +533,7 @@ void RWHandler::UpdateDatabase(string clientData)
 	{
 		sql::Statement *stmt;
 		stmt = con->createStatement();
-		string sqlStateMent = "UPDATE errorinfo SET fixed = \"" + fixed + "\" WHERE crash_id = \"" + crash_id + "\"";
+		string sqlStateMent = "UPDATE " + tables[0] +" SET fixed = \"" + fixed + "\" WHERE crash_id = \"" + crash_id + "\"";
 		stmt->execute(sqlStateMent);
 		delete stmt;
 	}
