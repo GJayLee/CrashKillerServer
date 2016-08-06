@@ -36,8 +36,8 @@ struct CHelloWorld_Service
 		//测试初始化使用
 		//httphandler->excuteAction();
 
-		//此处的http请求应改为每隔一段时间触发
-		m_timer.async_wait(boost::bind(&CHelloWorld_Service::wait_handler, this));
+		//此处的http请求应改为每隔一段时间触发,待定，先注释
+		//m_timer.async_wait(boost::bind(&CHelloWorld_Service::wait_handler, this));
 
 		int current = 0;
 		std::generate_n(m_cnnIdPool.begin(), MaxConnectionNum, [&current] {return ++current; });

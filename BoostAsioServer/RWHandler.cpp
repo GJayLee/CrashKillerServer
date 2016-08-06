@@ -393,7 +393,7 @@ void RWHandler::HandleError(const boost::system::error_code& ec)
 		m_callbackError(m_connId);
 }
 
-//每隔10s调用重发
+//等待10s，如果没收到返回，即isReSend为true则调用重发
 void RWHandler::wait_handler()
 {
 	if (isDisConnected)
