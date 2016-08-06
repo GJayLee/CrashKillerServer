@@ -34,20 +34,6 @@ public:
 	void SetConnId(int connId);
 	//获取当前socket的ID
 	int GetConnId() const;
-	////获取项目ID
-	//string GetAppKey();
-	////获取异常数据的开始日期
-	//string GetStartDate();
-	////获取异常数据的结束日期
-	//string GetEndDate();
-
-	/*void setSendData(const char* str)
-	{
-		sendData = new char[strlen(str) + 1];
-		memset(sendData, 0, sizeof(char)*(strlen(str) + 1));
-		strcpy(sendData, str);
-		offSet = 0;
-	}*/
 
 	template<typename F>
 	void RWHandler::SetCallBackError(F f)

@@ -168,8 +168,6 @@ private:
 		string yesterday = boost::gregorian::to_iso_extended_string(*d_iter);
 
 		//此处的http请求应改为每隔一段时间触发
-		httphandler->setStartDate(yesterday);
-		httphandler->setEndDate(today);
 		httphandler->excuteAction();
 
 		m_timer.expires_at(m_timer.expires_at() + boost::posix_time::seconds(UPDATE_TIME));

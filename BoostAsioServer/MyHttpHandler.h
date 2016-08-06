@@ -20,12 +20,6 @@ public:
 	MyHttpHandler(string a, string s, string e);
 	~MyHttpHandler();
 
-	//设置项目ID
-	void setAppKey(string key);
-	//设置异常数据的开始日期
-	void setStartDate(string date);
-	//设置异常数据的结束日期
-	void setEndDate(string date);
 	//向萌友请求数据，并写入数据库
 	void excuteAction();
 	//把同一个人的异常信息进行初步的分类

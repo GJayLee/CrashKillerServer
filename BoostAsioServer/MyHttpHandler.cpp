@@ -23,11 +23,6 @@ using boost::asio::ip::tcp;
 const string LIMIT_NUM = "50";
 const int MAX_LIMIT = 50;
 
-//从萌友平台获取异常数据时的默认appKey、start_date和end_date
-const string defaultAppKey = "9e4b010a0d51f6e020ead6ce37bad33896a00f90";
-const string defaultStartDate = "2016-08-04";
-const string defaultEndDate = "2016-08-05";
-
 //UTF-8转GB2312，测试
 char* U2G(const char* utf8)
 {
@@ -60,10 +55,6 @@ char* G2U(const char* gb2312)
 
 MyHttpHandler::MyHttpHandler()
 {
-	//设置默认请求的appkey、start_date和end_date
-	/*appkey = defaultAppKey;
-	start_date = defaultStartDate;
-	end_date = defaultEndDate;*/
 	//设置Header信息
 	host = "myou.cvte.com";
 	loginPage = "http://myou.cvte.com/api/in/auth/login";
@@ -86,10 +77,6 @@ MyHttpHandler::MyHttpHandler()
 MyHttpHandler::MyHttpHandler(string a, string s, string e)
 //MyHttpHandler::MyHttpHandler(string a, string s, string e) : appkey(a), start_date(s), end_date(e)
 {
-	//设置默认请求的appkey、start_date和end_date
-	/*appkey = defaultAppKey;
-	start_date = defaultStartDate;
-	end_date = defaultEndDate;*/
 	//设置Header信息
 	host = "myou.cvte.com";
 	loginPage = "http://myou.cvte.com/api/in/auth/login";
@@ -113,21 +100,6 @@ MyHttpHandler::MyHttpHandler(string a, string s, string e)
 MyHttpHandler::~MyHttpHandler()
 {
 	delete con;
-}
-//设置appkey
-void MyHttpHandler::setAppKey(string key)
-{
-	//appkey = key;
-}
-//设置开始日期
-void MyHttpHandler::setStartDate(string date)
-{
-	//start_date = date;
-}
-//设置结束日期
-void MyHttpHandler::setEndDate(string date)
-{
-	//end_date = date;
 }
 
 //根据外部配置文件中的appkey在数据库中创建对应的表
@@ -345,21 +317,6 @@ string MyHttpHandler::AutoDistributeCrash(string crash_context)
 //把同一个人的异常信息进行初步的分类,未完成
 void MyHttpHandler::AutoClassifyCrash(string developer)
 {
-	/*sql::PreparedStatement *pstmt;
-	string sqlStatement = "select developer from errorinfo group by developer";
-	pstmt = con->prepareStatement(sqlStatement);
-	sql::ResultSet *res;
-	res = pstmt->executeQuery();
-	std::vector<string> developer;
-	while (res->next())
-	{
-		if (res->getString("developer") != "")
-			developer.push_back(res->getString("developer"));
-	}
-
-	delete pstmt;
-	delete res;*/
-
 	std::vector<string> crash_id;
 	std::vector<string> crash_context;
 	std::unordered_map<int, std::vector<int>> crash_sim;
@@ -419,17 +376,6 @@ void MyHttpHandler::InsertModulesInfo(string crash_context)
 	while (boost::regex_search(crash_context, m, reg))
 	{
 		//遍历模块信息
-		/*for (boost::smatch::iterator it = m.begin(); it != m.end(); it+=2)
-		{
-			std::cout << it->str() << std::endl;
-			sql::PreparedStatement *pstmt;
-			//插入模块信息，如果数据库中有相同主键的数据，则更新数据库信息
-			pstmt = con->prepareStatement("INSERT IGNORE INTO moduleInfo(module_name) VALUES(?)");
-			pstmt->setString(1, it->str());
-			pstmt->execute();
-			delete pstmt;
-		}*/
-
 		boost::smatch::iterator it = m.begin();
 		//std::cout << it->str() << std::endl;
 		sql::PreparedStatement *pstmt;
@@ -563,7 +509,6 @@ int MyHttpHandler::GetErrorList(string offset, string appkey, string start_date,
 			headers.push_back(header);
 
 		// 读取所有剩下的数据作为包体
-		//std::string dataListInfo;
 		boost::system::error_code error;
 		while (boost::asio::read(socket, response,
 			boost::asio::transfer_at_least(1), error))
@@ -573,14 +518,6 @@ int MyHttpHandler::GetErrorList(string offset, string appkey, string start_date,
 			errorList.append(std::istream_iterator<char>(is), std::istream_iterator<char>());
 			//std::cout << &response;
 		}
-		//把utf8格式转换为GB2312
-		//char *myData;
-		//myData = U2G(errorList.c_str());
-		/*for (int i = 0; i < strlen(myData); i++)
-		{
-		std::cout << myData[i];
-		}
-		std::cout << std::endl;*/
 		//把数据写入到文件中
 		writeFile(errorList.c_str(), "receiveData.txt");
 	}
@@ -681,13 +618,6 @@ int MyHttpHandler::GetLoginToken()
 		read_json<ptree>(stream, pt);
 		pt1 = pt.get_child("data");
 		token = pt1.get<string>("token");
-
-		/*if (error != boost::asio::error::eof)
-		{
-		token = "";
-		std::cout << error.message() << std::endl;
-		return -3;
-		}*/
 	}
 	catch (std::exception& e)
 	{
