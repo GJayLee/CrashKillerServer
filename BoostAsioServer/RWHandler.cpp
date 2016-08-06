@@ -510,7 +510,7 @@ void RWHandler::UpdateDatabase(string clientData)
 
 		sql::Statement *stmt;
 		stmt = con->createStatement();
-		string sqlStateMent = "UPDATE errorinfo SET developer = \"" + developer
+		string sqlStateMent = "UPDATE" + tables[0] +" SET developer = \"" + developer
 			+ "\",fixed = \"" + fixed + "\" WHERE crash_id = \"" + crash_id + "\"";
 		stmt->execute(sqlStateMent);
 
