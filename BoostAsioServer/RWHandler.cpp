@@ -2,7 +2,11 @@
 处理服务端与客户端进行读写操作
 */
 
+#include <unordered_set>
+#include <boost\regex.hpp>
+
 #include "RWHandler.h"
+#include "generic.h"
 
 const int SEND_SIZE = 65535;
 
@@ -194,29 +198,6 @@ int RWHandler::GetConnId() const
 	return m_connId;
 }
 
-//从项目配置文件中获取appkey
-void RWHandler::InitProjectsTables()
-{
-	//读取配置文件中appkey信息
-	std::ifstream t("ProjectsConfigure.txt");
-	if (!t)
-	{
-		std::cout << "打开项目Appkey配置文件失败！" << std::endl;
-		return;
-	}
-	std::stringstream buffer;
-	buffer << t.rdbuf();
-
-	ptree pt, pt1, pt2;
-	read_json<ptree>(buffer, pt);
-	pt1 = pt.get_child("projects");
-	for (ptree::iterator it = pt1.begin(); it != pt1.end(); ++it)
-	{
-		pt2 = it->second;
-		tables.push_back(pt2.get<string>("tableName"));
-	}
-}
-
 // 异步写操作完成后write_handler触发
 void RWHandler::write_handler(const boost::system::error_code& ec)
 {
@@ -244,19 +225,24 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 	}
 	else
 	{
+		char initCommand[11] = { 0 };
+		for (int i = 2; i < 13; i++)
+			initCommand[i - 2] = (*str)[i];
 		//客户端请求初始化异常数据时调用
-		if (initErrorInfo || strcmp(&(*str)[2], "Get Expect") == 0)
+		//if (initErrorInfo || strcmp(&(*str)[2], "Get Expect") == 0)
+		if (initErrorInfo || strcmp(initCommand, "Get Expect") == 0)
 		{
 			if (!initErrorInfo)
 			{
+
 				boost::system::error_code ec;
-				string sendStr = ETX + (*str)[1] + "Receive";
+				string sendStr = ETX + (*str)[1] + projectConfigure;
 				write(m_sock, buffer(sendStr, sendStr.size()), ec);
 
 				Sleep(500);
 
 				initErrorInfo = true;
-				TransferDataToJson();
+				TransferDataToJson(&(*str)[13]);
 				dataToSendIndex = 0;
 				offSet = 0;
 				HandleWrite();
@@ -407,6 +393,32 @@ void RWHandler::wait_handler()
 	m_timer.async_wait(boost::bind(&RWHandler::wait_handler, this));
 }
 
+//从项目配置文件中获取appkey
+void RWHandler::InitProjectsTables()
+{
+	//读取配置文件中appkey信息
+	std::ifstream t("ProjectsConfigure.txt");
+	if (!t)
+	{
+		std::cout << "打开项目Appkey配置文件失败！" << std::endl;
+		return;
+	}
+	std::stringstream buffer;
+	buffer << t.rdbuf();
+	//初始化项目配置信息
+	projectConfigure = buffer.str();
+
+	ptree pt, pt1, pt2;
+	read_json<ptree>(buffer, pt);
+	pt1 = pt.get_child("projects");
+	for (ptree::iterator it = pt1.begin(); it != pt1.end(); ++it)
+	{
+		pt2 = it->second;
+		appkey_tables[pt2.get<string>("appkey")] = pt2.get<string>("tableName");
+		tables.push_back(pt2.get<string>("tableName"));
+	}
+}
+
 //从数据库中获取开发者信息并转换为JSON格式
 void RWHandler::GetDeveloperInfo()
 {
@@ -441,7 +453,7 @@ void RWHandler::GetDeveloperInfo()
 
 //从数据库中获取数据并把数据转为JSON格式上, 此处目前因为只有一个appkey
 //该函数应该传入appkey来找到数据库中对于的表，现在有问题
-void RWHandler::TransferDataToJson()
+void RWHandler::TransferDataToJson(string appkey)
 {
 	dataInJson.clear();
 
@@ -453,7 +465,7 @@ void RWHandler::TransferDataToJson()
 
 	string result = "";
 	//从数据库表中获取所有信息
-	string sqlStatement = "select * from " + tables[0] + " where fixed=\"false\"";
+	string sqlStatement = "select * from " + appkey_tables[appkey] + " where fixed=\"false\"";
 	res = stmt->executeQuery(sqlStatement);
 	//ptree pt3, pt4;
 	//循环遍历
@@ -465,6 +477,7 @@ void RWHandler::TransferDataToJson()
 		pt1.put("crash_id", res->getString("crash_id"));
 		pt1.put("developer", res->getString("developer"));
 		pt1.put("fixed", res->getString("fixed"));
+		pt1.put("crash_type", res->getString("crash_type"));
 		pt1.put("app_version", res->getString("app_version"));
 		pt1.put("first_crash_date_time", res->getString("first_crash_date_time"));
 		pt1.put("last_crash_date_time", res->getString("last_crash_date_time"));
@@ -492,9 +505,8 @@ void RWHandler::TransferDataToJson()
 
 //从客户端收到更新信息Json格式，解析JSON，更新数据库
 void RWHandler::UpdateDatabase(string clientData)
-//void RWHandler::UpdateDatabase(string crash_id, string developer, string fixed)
 {
-	string crash_id, developerId, fixed;
+	string crash_id, developerId, fixed, appkey;
 
 	ptree pt;
 	std::stringstream stream;
@@ -503,6 +515,7 @@ void RWHandler::UpdateDatabase(string clientData)
 	developerId = pt.get<string>("Developer");
 	crash_id = pt.get<string>("CrashId");
 	fixed = pt.get<string>("Solve");
+	appkey = pt.get<string>("Appkey");
 
 	//查找数据库信息
 	sql::PreparedStatement *pstmt;
@@ -520,23 +533,121 @@ void RWHandler::UpdateDatabase(string clientData)
 
 		sql::Statement *stmt;
 		stmt = con->createStatement();
-		string sqlStateMent = "UPDATE " + tables[0] +" SET developer = \"" + developer
+		string sqlStateMent = "UPDATE " + appkey_tables[appkey] +" SET developer = \"" + developer
 			+ "\",fixed = \"" + fixed + "\" WHERE crash_id = \"" + crash_id + "\"";
 		stmt->execute(sqlStateMent);
 
 		delete stmt;
 		delete pstmt;
 		delete res;
+		//对异常信息进行重新分类
+		AutoClassifyCrash(appkey_tables[appkey], developer);
 	}
 	//异常标记为已解决
 	else
 	{
 		sql::Statement *stmt;
 		stmt = con->createStatement();
-		string sqlStateMent = "UPDATE " + tables[0] +" SET fixed = \"" + fixed + "\" WHERE crash_id = \"" + crash_id + "\"";
+		string sqlStateMent = "UPDATE " + appkey_tables[appkey] +" SET fixed = \"" + fixed + "\" WHERE crash_id = \"" + crash_id + "\"";
 		stmt->execute(sqlStateMent);
 		delete stmt;
 	}
+}
+
+//更新开发者的异常信息时，需要重新对异常进行分类
+void RWHandler::AutoClassifyCrash(string tableName, string developer)
+{
+	sql::PreparedStatement *pstmt;
+	string sqlStatement = "select crash_id, crash_context from " + tableName + " where developer = \"" + developer + "\"";
+	pstmt = con->prepareStatement(sqlStatement);
+	sql::ResultSet *res;
+	res = pstmt->executeQuery();
+
+	//异常id的集合
+	std::vector<string> crash_id;
+	std::unordered_map<string, bool> hasClassy;
+	//每个异常中有哪些模块
+	std::unordered_map<string, std::unordered_set<string>> crash_modules;
+	//该开发者负责哪些模块
+	std::unordered_set<string> crash_totalModules;
+
+	while (res->next())
+	{
+		crash_id.push_back(res->getString("crash_id"));
+		hasClassy[res->getString("crash_id")] = false;
+		const char *regStr = "Cvte(\\.[0-9a-zA-Z]+){2,9}";
+		boost::regex reg(regStr);
+		boost::smatch m;
+		string crash_context = res->getString("crash_context");
+		while (boost::regex_search(crash_context, m, reg))
+		{
+			boost::smatch::iterator it = m.begin();
+			crash_totalModules.insert(it->str());
+			crash_modules[res->getString("crash_id")].insert(it->str());
+			crash_context = m.suffix().str();
+		}
+	}
+
+	delete pstmt;
+	delete res;
+
+	//初始化每个异常的模块向量
+	std::unordered_map<string, std::vector<int>> crash_vectors;
+	std::unordered_set<string>::iterator iterTotalModules = crash_totalModules.begin();
+	for (; iterTotalModules != crash_totalModules.end(); ++iterTotalModules)
+	{
+		std::unordered_map<string, std::unordered_set<string>>::iterator iter = crash_modules.begin();
+		for (; iter != crash_modules.end(); ++iter)
+		{
+			if (iter->second.find((*iterTotalModules)) == iter->second.end())
+				crash_vectors[iter->first].push_back(0);
+			else
+				crash_vectors[iter->first].push_back(1);
+		}
+	}
+	//异常的类型，根据异常向量的余弦相似度判断它们是否是同一个异常
+	int type = 0;
+	std::unordered_map<int, std::vector<string>> crash_types;
+	std::unordered_map<string, std::vector<int>>::iterator iter = crash_vectors.begin();
+	for (int i = 0; i < crash_id.size(); i++)
+	{
+		if (!hasClassy[crash_id[i]])
+		{
+			crash_types[type].push_back(crash_id[i]);
+			if (crash_vectors.find(crash_id[i]) == crash_vectors.end())
+				continue;
+		}
+
+		else
+			continue;
+		for (int j = i + 1; j < crash_id.size(); j++)
+		{
+			if (crash_vectors.find(crash_id[j]) == crash_vectors.end())
+				continue;
+			if (CalculateCos(crash_vectors[crash_id[i]], crash_vectors[crash_id[j]]))
+			{
+				crash_types[type].push_back(crash_id[j]);
+				hasClassy[crash_id[j]] = true;
+			}
+		}
+		++type;
+	}
+
+	//遍历异常的类型，并把它插入数据库中
+	con->setAutoCommit(0);
+	for (int i = 0; i < type; i++)
+	{
+		for (int j = 0; j < crash_types[i].size(); j++)
+		{
+			std::stringstream ss;
+			ss << i;
+			sqlStatement = "update " + tableName + " set crash_type=\"" + ss.str() + "\" where crash_id = \"" + crash_types[i][j] + "\"";
+			pstmt = con->prepareStatement(sqlStatement);
+			pstmt->execute();
+			delete pstmt;
+		}
+	}
+	con->commit();
 }
 
 //从数据库中取出数据，未处理，测试
@@ -575,48 +686,4 @@ void RWHandler::GetDatabaseData()
 	delete res;
 	delete stmt;
 	delete con;
-}
-
-//把数据写入到文件方便测试
-void RWHandler::writeFile(std::vector<string> res, const char *fileName)
-{
-	std::ofstream out(fileName, std::ios::out);
-	if (!out)
-	{
-		std::cout << "Can not Open this file!" << std::endl;
-		return;
-	}
-	
-	std::stringstream stream;
-	ptree pt, pt1;
-	for (int i = 0; i < res.size(); i++)
-	{
-		/*out << res[i];
-		out << std::endl;*/
-		//ptree pt1;
-		pt1.put("", res[i]);
-
-		pt.push_back(make_pair("", pt1));
-	}
-	//pt.put_child("datas", pt2);
-	write_json(stream, pt);
-
-	out << stream.str();
-
-	out.close();
-}
-
-//把数据写入到文件方便测试
-void RWHandler::writeFile(string res, const char *fileName)
-{
-	std::ofstream out(fileName, std::ios::out);
-	if (!out)
-	{
-		std::cout << "Can not Open this file!" << std::endl;
-		return;
-	}
-	out << res;
-	out << std::endl;
-
-	out.close();
 }

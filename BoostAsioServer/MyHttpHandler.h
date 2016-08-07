@@ -22,8 +22,6 @@ public:
 
 	//向萌友请求数据，并写入数据库
 	void excuteAction();
-	//把同一个人的异常信息进行初步的分类
-	void AutoClassifyCrash(string developer);
 
 private:
 	//获取异常数据列表
@@ -45,25 +43,16 @@ private:
 	void InsertDeveloperInfo(string info);
 	//根据异常中堆栈的模块信息智能分配异常，返回分配的开发者名字
 	string AutoDistributeCrash(string crash_context);
+	//执行异常分类
+	void excuteCrashClassfy(string tableName);
 	//把同一个人的异常信息进行初步的分类
-	//void AutoClassifyCrash(string developer);
+	void AutoClassifyCrash(string tableName, string developer);
 	
-	//简单字符串对比，返回相似度
-	int Levenshtein(string str1, string str2);
-	//求三个数的最小值
-	int min(int a, int b, int c);
-
-	//把数据写入到文本文件中方便查看，测试
-	void writeFile(const char *src, const char *fileName);
-
 	string host;                  //主机
 	string loginPage;             //登陆网址
 	string analyzePage;           //获取异常数据接口网址
 	string data;                  //登陆信息
 	string origin;            
-	//string appkey;                //项目ID
-	//string start_date;            //异常数据的开始日期
-	//string end_date;              //异常数据的结束日期
 
 	std::vector<string> tables;
 	std::vector<string> appkeys;

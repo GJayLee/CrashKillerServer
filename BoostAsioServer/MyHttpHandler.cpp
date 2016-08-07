@@ -2,6 +2,7 @@
 同时把获取到的数据写入数据库中*/
 
 #include<unordered_map>
+#include<unordered_set>
 #include <fstream>
 #include <boost/asio.hpp>
 #include <boost\property_tree\ptree.hpp>
@@ -11,6 +12,7 @@
 #include<algorithm>
 #include<math.h>
 
+#include "generic.h"
 #include "MyHttpHandler.h"
 
 #define BOOST_SPIRIT_THREADSAFE
@@ -22,36 +24,6 @@ using boost::asio::ip::tcp;
 //每次请求从萌友获取数据的最大数量,字符型用来拼接HTTP请求，整型用来判断是否达到最大值
 const string LIMIT_NUM = "50";
 const int MAX_LIMIT = 50;
-
-//UTF-8转GB2312，测试
-char* U2G(const char* utf8)
-{
-	int len = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, NULL, 0);
-	wchar_t* wstr = new wchar_t[len + 1];
-	memset(wstr, 0, len + 1);
-	MultiByteToWideChar(CP_UTF8, 0, utf8, -1, wstr, len);
-	len = WideCharToMultiByte(CP_ACP, 0, wstr, -1, NULL, 0, NULL, NULL);
-	char* str = new char[len + 1];
-	memset(str, 0, len + 1);
-	WideCharToMultiByte(CP_ACP, 0, wstr, -1, str, len, NULL, NULL);
-	if (wstr) delete[] wstr;
-	return str;
-}
-
-//GB2312转UTF-8，测试
-char* G2U(const char* gb2312)
-{
-	int len = MultiByteToWideChar(CP_ACP, 0, gb2312, -1, NULL, 0);
-	wchar_t* wstr = new wchar_t[len + 1];
-	memset(wstr, 0, len + 1);
-	MultiByteToWideChar(CP_ACP, 0, gb2312, -1, wstr, len);
-	len = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, NULL, 0, NULL, NULL);
-	char* str = new char[len + 1];
-	memset(str, 0, len + 1);
-	WideCharToMultiByte(CP_UTF8, 0, wstr, -1, str, len, NULL, NULL);
-	if (wstr) delete[] wstr;
-	return str;
-}
 
 MyHttpHandler::MyHttpHandler()
 {
@@ -136,7 +108,7 @@ void MyHttpHandler::InitDatabaseTabelByAppkey()
 			sql::PreparedStatement *pstmt;
 			string sqlStatement;
 			string str1 = "CREATE TABLE if not EXISTS " + tables[i] + " (crash_id varchar(255) PRIMARY KEY NOT NULL,";
-			string str2 = "developer varchar(255) DEFAULT NULL, fixed VARCHAR(255) DEFAULT NULL,app_version VARCHAR(255) DEFAULT NULL,";
+			string str2 = "developer varchar(255) DEFAULT NULL, fixed VARCHAR(255) DEFAULT NULL,crash_type VARCHAR(255) DEFAULT NULL,app_version VARCHAR(255) DEFAULT NULL,";
 			string str3 = "first_crash_date_time VARCHAR(255) DEFAULT NULL,last_crash_date_time VARCHAR(255) DEFAULT NULL,";
 			string str4 = "crash_context_digest VARCHAR(255) DEFAULT NULL,crash_context text DEFAULT NULL) ENGINE = InnoDB DEFAULT CHARSET = utf8";
 			sqlStatement = str1 + str2 + str3 + str4;
@@ -184,6 +156,7 @@ void MyHttpHandler::excuteAction()
 			++offset;
 		}
 		std::cout << "Get Error List finish!" << std::endl;
+		excuteCrashClassfy(tables[i]);
 	}
 }
 
@@ -282,69 +255,120 @@ string MyHttpHandler::AutoDistributeCrash(string crash_context)
 
 	delete pstmt;
 	delete res;
-
-	/*if (moduleName != "")
-	{
-		sql::PreparedStatement *pstmt;
-		sql::ResultSet *res;
-
-		string sqlStatement = "select developer_id from moduleinfo where module_name = \"" + moduleName + "\"";
-		//从errorinfo表中获取所有信息
-		pstmt = con->prepareStatement(sqlStatement);
-		res = pstmt->executeQuery();
-		
-		string developer_id;
-		while (res->next())
-			developer_id = res->getString("developer_id");
-
-		delete pstmt;
-		delete res;
-
-		sqlStatement = "";
-		sqlStatement = "select Name from developer where ID = \"" + developer_id + "\"";
-		con->prepareStatement(sqlStatement);
-		res = pstmt->executeQuery();
-
-		while(res->next())
-			developerName = res->getString("Name");
-
-		delete res;
-	}*/
 	
 	return developerName;
 }
 
-//把同一个人的异常信息进行初步的分类,未完成
-void MyHttpHandler::AutoClassifyCrash(string developer)
+//执行异常分类
+void MyHttpHandler::excuteCrashClassfy(string tableName)
 {
-	std::vector<string> crash_id;
-	std::vector<string> crash_context;
-	std::unordered_map<int, std::vector<int>> crash_sim;
-
 	sql::PreparedStatement *pstmt;
-	string sqlStatement = "select crash_id, crash_context from errorinfo where developer = \"" + developer + "\"";
+	string sqlStatement = "select developer from errorinfo group by developer";
+	pstmt = con->prepareStatement(sqlStatement);
+	sql::ResultSet *res;
+	res = pstmt->executeQuery();
+	while (res->next())
+	{
+		AutoClassifyCrash(tableName, res->getString("developer"));
+	}
+	delete pstmt;
+	delete res;
+}
+
+//把同一个人的异常信息进行初步的分类,未完成
+void MyHttpHandler::AutoClassifyCrash(string tableName, string developer)
+{
+	sql::PreparedStatement *pstmt;
+	string sqlStatement = "select crash_id, crash_context from " + tableName + " where developer = \"" + developer + "\"";
 	pstmt = con->prepareStatement(sqlStatement);
 	sql::ResultSet *res;
 	res = pstmt->executeQuery();
 
+	//异常id的集合
+	std::vector<string> crash_id;
+	std::unordered_map<string, bool> hasClassy;
+	//每个异常中有哪些模块
+	std::unordered_map<string, std::unordered_set<string>> crash_modules;
+	//该开发者负责哪些模块
+	std::unordered_set<string> crash_totalModules;
+
 	while (res->next())
 	{
 		crash_id.push_back(res->getString("crash_id"));
-		crash_context.push_back(res->getString("crash_context"));
-	}
-	for (int i = 0; i < crash_context.size()-1; i++)
-	{
-		crash_sim[i].push_back(0);
-		for (int j = i+1; j < crash_context.size(); j++)
+		hasClassy[res->getString("crash_id")] = false;
+		const char *regStr = "Cvte(\\.[0-9a-zA-Z]+){2,9}";
+		boost::regex reg(regStr);
+		boost::smatch m;
+		string crash_context = res->getString("crash_context");
+		while (boost::regex_search(crash_context, m, reg))
 		{
-			int similarity = Levenshtein(crash_context[i], crash_context[j]);
-			crash_sim[i].push_back(similarity);
-			crash_sim[j].push_back(similarity);
+			boost::smatch::iterator it = m.begin();
+			crash_totalModules.insert(it->str());
+			crash_modules[res->getString("crash_id")].insert(it->str());
+			crash_context = m.suffix().str();
 		}
 	}
 
 	delete pstmt;
 	delete res;
+	
+	//初始化每个异常的模块向量
+	std::unordered_map<string, std::vector<int>> crash_vectors;
+	std::unordered_set<string>::iterator iterTotalModules = crash_totalModules.begin();
+	for (; iterTotalModules != crash_totalModules.end(); ++iterTotalModules)
+	{
+		std::unordered_map<string, std::unordered_set<string>>::iterator iter = crash_modules.begin();
+		for (; iter != crash_modules.end(); ++iter)
+		{
+			if (iter->second.find((*iterTotalModules)) == iter->second.end())
+				crash_vectors[iter->first].push_back(0);
+			else
+				crash_vectors[iter->first].push_back(1);
+		}
+	}
+	//异常的类型，根据异常向量的余弦相似度判断它们是否是同一个异常
+	int type = 0;
+	std::unordered_map<int, std::vector<string>> crash_types;
+	std::unordered_map<string, std::vector<int>>::iterator iter = crash_vectors.begin();
+	for (int i = 0; i < crash_id.size(); i++)
+	{
+		if (!hasClassy[crash_id[i]])
+		{
+			crash_types[type].push_back(crash_id[i]);
+			if (crash_vectors.find(crash_id[i]) == crash_vectors.end())
+				continue;
+		}
+			
+		else
+			continue;
+		for (int j = i + 1; j < crash_id.size(); j++)
+		{
+			if (crash_vectors.find(crash_id[j]) == crash_vectors.end())
+				continue;
+			if (CalculateCos(crash_vectors[crash_id[i]], crash_vectors[crash_id[j]]))
+			{
+				crash_types[type].push_back(crash_id[j]);
+				hasClassy[crash_id[j]] = true;
+			}
+		}
+		++type;
+	}
+
+	//遍历异常的类型，并把它插入数据库中
+	con->setAutoCommit(0);
+	for (int i = 0; i < type; i++)
+	{
+		for (int j = 0; j < crash_types[i].size(); j++)
+		{
+			std::stringstream ss;
+			ss << i;
+			sqlStatement = "update " + tableName + " set crash_type=\"" + ss.str() + "\" where crash_id = \"" + crash_types[i][j] + "\"";
+			pstmt = con->prepareStatement(sqlStatement);
+			pstmt->execute();
+			delete pstmt;
+		}
+	}
+	con->commit();
 }
 
 //从异常堆栈信息中提取出模块信息,测试，初始化
@@ -626,78 +650,6 @@ int MyHttpHandler::GetLoginToken()
 		return -4;
 	}
 	return 0;
-}
-
-//简单字符串对比，返回相似度,测试
-int MyHttpHandler::Levenshtein(string str1, string str2)
-{
-	int len1 = str1.length();
-	int len2 = str2.length();
-	int **dif = new int*[len1 + 1];
-	for (int i = 0; i < len1 + 1; i++)
-	{
-		dif[i] = new int[len2 + 1];
-		memset(dif[i], 0, sizeof(int)*(len2 + 1));
-	}
-	for (int i = 0; i <= len1; i++)
-		dif[i][0] = i;
-	for (int i = 0; i <= len2; i++)
-		dif[0][i] = i;
-
-	for (int i = 1; i <= len1; i++)
-	{
-		for (int j = 1; j <= len2; j++)
-		{
-			if (str1[i - 1] == str2[j - 1])
-				dif[i][j] = dif[i - 1][j - 1];
-			else
-				dif[i][j] = min(dif[i][j - 1], dif[i - 1][j], dif[i - 1][j - 1]) + 1;
-		}
-	}
-	float similarity = 1 - (float)dif[len1][len2] / std::max(len1, len2);
-	//百分比
-	similarity *= 100;
-
-	for (int i = 0; i < len1 + 1; i++)
-		delete[] dif[i];
-
-	return (int)similarity;
-}
-//求三个数的最小值
-int MyHttpHandler::min(int a, int b, int c) {
-	if (a > b) {
-		if (b > c)
-			return c;
-		else
-			return b;
-	}
-	if (a > c) {
-		if (c > b)
-			return b;
-		else
-			return c;
-	}
-	if (b > c) {
-		if (c > a)
-			return a;
-		else
-			return c;
-	}
-}
-
-//把获取到的数据写到文件中，方便测试查看
-void MyHttpHandler::writeFile(const char *src, const char *fileName)
-{
-	std::ofstream out(fileName, std::ios::out);
-	if (!out)
-	{
-		std::cout << "Can not Open this file!" << std::endl;
-		return;
-	}
-	out << src;
-	out << std::endl;
-
-	out.close();
 }
 
 //根据异常信息提取开发者信息，测试

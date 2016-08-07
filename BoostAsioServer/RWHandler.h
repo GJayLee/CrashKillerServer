@@ -9,11 +9,18 @@
 #include<boost\tokenizer.hpp>
 #include<boost\algorithm\string.hpp>
 
-#include "MyHttpHandler.h"
+//连接数据库
+#include<cppconn\driver.h>
+#include<cppconn\exception.h>
+#include <cppconn/resultset.h> 
+#include <cppconn/statement.h>
+#include<mysql_connection.h>
+#include <cppconn/prepared_statement.h>
 
 using namespace boost::asio;
 using namespace boost::property_tree;
 using boost::asio::ip::tcp;
+using std::string;
 
 class RWHandler
 {
@@ -48,10 +55,12 @@ private:
 	//从数据库中获取开发者信息并转换为JSON格式
 	void GetDeveloperInfo();
 	//从数据库中获取数据并把数据转为JSON格式上
-	void TransferDataToJson();
+	void TransferDataToJson(string appkey);
 	//从客户端收到更新信息，更新数据库
 	//void UpdateDatabase(string crash_id, string developerId, string fixed);
 	void UpdateDatabase(string clientData);
+	//更新开发者的异常信息时，需要重新对异常进行分类
+	void AutoClassifyCrash(string tableName, string developer);
 	//从数据库中取出数据，未处理，测试
 	void GetDatabaseData();
 	// 异步写操作完成后write_handler触发
@@ -76,10 +85,6 @@ private:
 		sendIds.push_back(sendId);
 	}
 
-	//把数据写入到文件方便测试
-	void writeFile(std::vector<string> res, const char *fileName);
-	void writeFile(string res, const char *fileName);
-
 private:
 	ip::tcp::socket m_sock;
 	int m_connId;
@@ -99,7 +104,9 @@ private:
 	//开发者信息，JSON格式
 	string developerInfo;
 
+	std::unordered_map<string, string> appkey_tables;
 	std::vector<string> tables;
+	string projectConfigure;
 
 	bool initErrorInfo;       //是否发送异常数据
 	bool initDeveloper;       //是否发送开发者信息
