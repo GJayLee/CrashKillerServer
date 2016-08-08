@@ -1,12 +1,4 @@
 #pragma once
-//
-////连接数据库
-//#include<cppconn\driver.h>
-//#include<cppconn\exception.h>
-//#include <cppconn/resultset.h> 
-//#include <cppconn/statement.h>
-//#include<mysql_connection.h>
-//#include <cppconn/prepared_statement.h>
 
 #include "MyDatabaseHandler.h"
 
@@ -53,17 +45,6 @@ private:
 	string data;                  //登陆信息
 	string origin;            
 
-	/*std::vector<string> tables;
-	std::vector<string> appkeys;
-	std::vector<string> starts;
-	std::vector<string> ends;*/
-
 	string token;                 //登陆成功时返回的token
 	string errorList;             //异常数据列表，JSON格式
-								  
-	//int count;                    //统计该请求是否已达到最大值，limit
-
-	////连接数据库
-	//sql::Driver *dirver;
-	//sql::Connection *con;
 };

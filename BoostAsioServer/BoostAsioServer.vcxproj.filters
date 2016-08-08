@@ -44,5 +44,8 @@
     <ClInclude Include="MyDatabaseHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="CrashKillerServer.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

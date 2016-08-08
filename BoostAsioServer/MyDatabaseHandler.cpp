@@ -3,6 +3,10 @@
 
 using namespace boost::property_tree;
 
+/*
+数据库处理响应类
+*/
+
 MyDatabaseHandler::MyDatabaseHandler()
 {
 	//连接数据库
