@@ -14,16 +14,16 @@ const string STX = "\x2";       //正文开始
 const string EOT = "\x4";       //正文结束
 const string ETX = "\x3";       //收到
 
+const char* INIT_CRASH_INFO = "Get Expect";           //初始化异常信息的请求命令
+const char* INIT_DEVELOPER_INFO = "Get Develop";      //初始化开发者信息的请求命令
+const char* UPDATE_CRASH_INFO = "Up";                 //请求更新的异常信息的命令
+
 RWHandler::RWHandler(io_service& ios) : m_sock(ios), sendIds(9), m_timer(ios)
 {
-	//httphandler = new MyHttpHandler();
 	offSet = 0;
 	dataToSendIndex = 0;
 	initErrorInfo = false;
 	initDeveloper = false;
-	/*appKey = "";
-	start_date = "";
-	end_date = "";*/
 
 	isDisConnected = false;
 
@@ -49,21 +49,6 @@ RWHandler::~RWHandler()
 
 void RWHandler::HandleRead()
 {
-	//三种情况下会返回：1.缓冲区满；2.transfer_at_least为真(收到特定数量字节即返回)；3.有错误发生
-	//async_read(m_sock, buffer(m_buff), transfer_at_least(HEAD_LEN), [this](const boost::system::error_code& ec, size_t size)
-	//{
-	//	if (ec != nullptr)
-	//	{
-	//		HandleError(ec);
-	//		return;
-	//	}
-	//	
-	//	//std::cout << m_buff.size() << "," << m_buff.data() << std::endl;
-	//	//HandleRead();
-	//	offSet = offSet + 10;
-	//	HandleWrite();
-	//});
-
 	try
 	{
 		//接受消息（非阻塞）
@@ -78,24 +63,9 @@ void RWHandler::HandleRead()
 
 void RWHandler::HandleWrite()
 {
-	/*boost::system::error_code ec;
-	write(m_sock, buffer(data, len), ec);
-	if (ec != nullptr)
-	HandleError(ec);*/
 	// 发送信息(非阻塞)
-	/*boost::shared_ptr<std::string> pstr(new
-	std::string("\4asdqwdqwddascd"));
-	m_sock.async_write_some(buffer(*pstr),
-	boost::bind(&RWHandler::write_handler, this, placeholders::error));*/
-
 	if (initErrorInfo)
 	{
-		/*std::stringstream ss;
-		string dataSize;
-		ss << dataInJson[dataToSendIndex].size();
-		ss >> dataSize;
-		string data = dataSize + "+" + dataInJson[dataToSendIndex];*/
-
 		//没有超过最大缓冲区，可以完整发送
 		if (dataInJson[dataToSendIndex].size() <= SEND_SIZE)
 		{
@@ -107,9 +77,6 @@ void RWHandler::HandleWrite()
 		}
 		else
 		{
-			/*string endStr = "End" + dataInJson[dataToSendIndex];
-			m_sock.async_write_some(buffer(endStr.c_str() + offSet, dataInJson[dataToSendIndex].size() - offSet + 3),
-			boost::bind(&RWHandler::write_handler, this, placeholders::error));*/
 			//把数据截断发送
 			//添加结束符告诉客户端这是该data的最后一段
 			if ((offSet + SEND_SIZE) >= dataInJson[dataToSendIndex].size())
@@ -131,14 +98,6 @@ void RWHandler::HandleWrite()
 		//从发送起计算，10s后没接收到返回就重发
 		isReSend = true;
 		m_timer.expires_from_now(boost::posix_time::seconds(10));
-
-		/*int sendSize = 0;
-		if (strlen(sendData) - offSet < SEND_SIZE)
-		sendSize = strlen(sendData) - offSet;
-		else
-		sendSize = SEND_SIZE;
-		m_sock.async_write_some(buffer(sendData + offSet, sendSize),
-		boost::bind(&RWHandler::write_handler, this, placeholders::error));*/
 	}
 	//发送开发者信息
 	if (initDeveloper)
@@ -208,7 +167,6 @@ void RWHandler::write_handler(const boost::system::error_code& ec)
 	}
 	else
 	{
-		//std::cout << "成功发送！" << std::endl;
 		//接受消息（非阻塞）
 		HandleRead();
 	}
@@ -225,127 +183,114 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 	}
 	else
 	{
-		char initCommand[11] = { 0 };
-		for (int i = 2; i < 13; i++)
-			initCommand[i - 2] = (*str)[i];
-		//客户端请求初始化异常数据时调用
-		//if (initErrorInfo || strcmp(&(*str)[2], "Get Expect") == 0)
-		if (initErrorInfo || strcmp(initCommand, "Get Expect") == 0)
+		//从接收到的信息中获取请求命令
+		char command[30] = { 0 };
+		for (int i = 2; i < 30; i++)
 		{
-			if (!initErrorInfo)
+			if ((*str)[i] == '\0')
+				break;
+			command[i - 2] = (*str)[i];
+		}
+		//客户端请求初始化异常数据时调用
+		if (initErrorInfo || strcmp(&(*str)[2], INIT_CRASH_INFO) == 0)
+		//if (strcmp(command, "Get Expect") == 0)
+		{
+			boost::system::error_code ec;
+			string sendStr = ETX + (*str)[1] + projectConfigure;
+			write(m_sock, buffer(sendStr, sendStr.size()), ec);
+
+			Sleep(500);
+
+			initErrorInfo = true;
+			TransferDataToJson(&(*str)[13]);
+			dataToSendIndex = 0;
+			offSet = 0;
+			HandleWrite();
+		}
+		//客户端发送获取开发者信息时
+		else if (strcmp(&(*str)[2], INIT_DEVELOPER_INFO) == 0)
+		{
+			boost::system::error_code ec;
+			string sendStr = ETX + (*str)[1] + "Receive";
+			write(m_sock, buffer(sendStr, sendStr.size()), ec);
+
+			Sleep(500);
+
+			initDeveloper = true;
+			GetDeveloperInfo();
+			offSet = 0;
+			HandleWrite();
+		}
+		//收到确认返回时，根据返回执行不同的操作
+		else if ((*str)[0] == ETX[0])
+		{
+			//收到返回，设置重发为false
+			isReSend = false;
+			if (initErrorInfo)
 			{
-
-				boost::system::error_code ec;
-				string sendStr = ETX + (*str)[1] + projectConfigure;
-				write(m_sock, buffer(sendStr, sendStr.size()), ec);
-
-				Sleep(500);
-
-				initErrorInfo = true;
-				TransferDataToJson(&(*str)[13]);
-				dataToSendIndex = 0;
-				offSet = 0;
-				HandleWrite();
-			}
-			else
-			{
-				if ((*str)[0] == ETX[0])
+				int sendId = (*str)[1] - '0';
+				//RecyclSendId(sendId);
+				if ((offSet + SEND_SIZE) > dataInJson[dataToSendIndex].size())
 				{
-					//收到返回，设置重发为false
-					isReSend = false;
-					int sendId = (*str)[1] - '0';
-					//RecyclSendId(sendId);
-					if ((offSet + SEND_SIZE) > dataInJson[dataToSendIndex].size())
+					std::cout << dataToSendIndex << "发送完成！" << std::endl;
+					++dataToSendIndex;
+					//判断是否还有下一条异常，如果有则继续发送，无则关闭连接
+					if (dataToSendIndex < dataInJson.size())
 					{
-						std::cout << dataToSendIndex << "发送完成！" << std::endl;
-						++dataToSendIndex;
-						//判断是否还有下一条异常，如果有则继续发送，无则关闭连接
-						if (dataToSendIndex < dataInJson.size())
-						{
-							offSet = 0;
-							HandleWrite();
-						}
-						else
-						{
-							boost::system::error_code ec;
-							string sendStr = GetSendData(EOT,"SendFinish");
-							write(m_sock, buffer(sendStr, sendStr.size()), ec);
-							initErrorInfo = false;
-
-							HandleRead();
-							////关闭连接
-							//CloseSocket();
-							//std::cout << "断开连接" << m_connId << std::endl;
-							//if (m_callbackError)
-							//	m_callbackError(m_connId);
-						}
+						offSet = 0;
+						HandleWrite();
 					}
 					else
 					{
-						offSet = offSet + SEND_SIZE;
-						HandleWrite();
-					}
-				}
-			}
-		}
-		//客户端发送获取开发者信息时
-		else if (initDeveloper || strcmp(&(*str)[2], "Get Develop") == 0)
-		{
-			if (!initDeveloper)
-			{
-				boost::system::error_code ec;
-				string sendStr = ETX + (*str)[1] + "Receive";
-				write(m_sock, buffer(sendStr, sendStr.size()), ec);
-
-				Sleep(500);
-
-				initDeveloper = true;
-				GetDeveloperInfo();
-				offSet = 0;
-				HandleWrite();
-			}
-			else
-			{
-				if ((*str)[0] == ETX[0])
-				{
-					//收到返回，设置重发为false
-					isReSend = false;
-					int sendId = (*str)[1] - '0';
-					//RecyclSendId(sendId);
-					if ((offSet + SEND_SIZE) > developerInfo.size())
-					{
-						std::cout << "开发者信息发送完成！" << std::endl;
 						boost::system::error_code ec;
 						string sendStr = GetSendData(EOT, "SendFinish");
 						write(m_sock, buffer(sendStr, sendStr.size()), ec);
-						initDeveloper = false;
+						initErrorInfo = false;
+
 						HandleRead();
 					}
-					else
-					{
-						offSet = offSet + SEND_SIZE;
-						HandleWrite();
-					}
+				}
+				else
+				{
+					offSet = offSet + SEND_SIZE;
+					HandleWrite();
+				}
+			}
+			else if (initDeveloper)
+			{
+				int sendId = (*str)[1] - '0';
+				//RecyclSendId(sendId);
+				if ((offSet + SEND_SIZE) > developerInfo.size())
+				{
+					std::cout << "开发者信息发送完成！" << std::endl;
+					boost::system::error_code ec;
+					string sendStr = GetSendData(EOT, "SendFinish");
+					write(m_sock, buffer(sendStr, sendStr.size()), ec);
+					initDeveloper = false;
+					HandleRead();
+				}
+				else
+				{
+					offSet = offSet + SEND_SIZE;
+					HandleWrite();
 				}
 			}
 		}
+		//客户端返回更新内容，如分配给哪个用户，异常是否已解决时调用
+		else if(strcmp(command, UPDATE_CRASH_INFO) == 0)
+		{
+			std::cout << "接收消息：" << &(*str)[0] << std::endl;
+			UpdateDatabase(&(*str)[4]);
+			boost::system::error_code ec;
+			string sendStr = ETX + (*str)[1] + "UpdateFinish";
+			write(m_sock, buffer(sendStr, sendStr.size()), ec);
+			HandleRead();
+		}
+		//其他情况
 		else
 		{
 			std::cout << "接收消息：" << &(*str)[0] << std::endl;
-			//客户端返回更新内容，如分配给哪个用户，异常是否已解决时调用
-			char command[3] = { 0 };
-			for (int i = 2; i < 4; i++)
-				command[i-2] = (*str)[i];
-			if (strcmp(command, "Up") == 0)
-			{
-				UpdateDatabase(&(*str)[4]);
-				boost::system::error_code ec;
-				string sendStr = ETX + (*str)[1] + "UpdateFinish";
-				write(m_sock, buffer(sendStr, sendStr.size()), ec);
-				HandleRead();
-			}
-			else
-				HandleRead();
+			HandleRead();
 		}
 	}
 }

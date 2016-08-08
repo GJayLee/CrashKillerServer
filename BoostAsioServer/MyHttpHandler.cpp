@@ -275,7 +275,7 @@ void MyHttpHandler::excuteCrashClassfy(string tableName)
 	delete res;
 }
 
-//把同一个人的异常信息进行初步的分类,未完成
+//把同一个人的异常信息进行初步的分类
 void MyHttpHandler::AutoClassifyCrash(string tableName, string developer)
 {
 	sql::PreparedStatement *pstmt;
@@ -338,7 +338,6 @@ void MyHttpHandler::AutoClassifyCrash(string tableName, string developer)
 			if (crash_vectors.find(crash_id[i]) == crash_vectors.end())
 				continue;
 		}
-			
 		else
 			continue;
 		for (int j = i + 1; j < crash_id.size(); j++)

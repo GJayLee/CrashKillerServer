@@ -151,7 +151,7 @@ void writeFile(const char *src, const char *fileName)
 }
 
 
-//计算两个异常向量间的余弦相似度
+//计算两个向量间的余弦相似度
 bool CalculateCos(std::vector<int> a, std::vector<int> b)
 {
 	float lengthA = 0, lengthB = 0;
