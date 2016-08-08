@@ -62,17 +62,17 @@ private:
 	//void GetDatabaseData();
 
 	//根据传输协议拼接发送消息
-	string GetSendData(string flag, string msg);
+	//string GetSendData(string flag, string msg);
 
 	//循环使用send ID
-	void RecyclSendId(int sendId)
-	{
-		auto it = sendIDArray.find(sendId);
-		if (it != sendIDArray.end())
-			sendIDArray.erase(it);
-		//std::cout << "current connect count: " << m_handlers.size() << std::endl;
-		sendIds.push_back(sendId);
-	}
+	//void RecyclSendId(int sendId)
+	//{
+	//	auto it = sendIDArray.find(sendId);
+	//	if (it != sendIDArray.end())
+	//		sendIDArray.erase(it);
+	//	//std::cout << "current connect count: " << m_handlers.size() << std::endl;
+	//	sendIds.push_back(sendId);
+	//}
 
 private:
 	ip::tcp::socket m_sock;

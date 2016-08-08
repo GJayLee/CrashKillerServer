@@ -101,6 +101,8 @@ void MyDatabaseHandler::InitDatabaseTabelByAppkey()
 			delete pstmt;
 		}
 		con->commit();
+		//获取外部配置文件中的项目信息
+		projectConfigureInfoInJson = buffer.str();
 	}
 	catch (std::exception& e)
 	{
@@ -208,14 +210,14 @@ bool MyDatabaseHandler::CalculateCos(std::vector<int> a, std::vector<int> b)
 	float dotProduct = 0;
 	for (int i = 0; i < a.size(); i++)
 	{
-		lengthA += pow(a[i], 2);
-		lengthB += pow(b[i], 2);
+		lengthA += (float)pow(a[i], 2);
+		lengthB += (float)pow(b[i], 2);
 		dotProduct += (a[i] * b[i]);
 	}
 	lengthA = sqrt(lengthA);
 	lengthB = sqrt(lengthB);
 
-	int similarity = 100 * dotProduct / (lengthA*lengthB);
+	int similarity = (int)(100 * dotProduct / (lengthA*lengthB));
 	return similarity >= 70 ? true : false;
 }
 
@@ -470,9 +472,11 @@ void MyDatabaseHandler::GetDeveloperInfo(string &developerInfo)
 	delete stmt;
 	delete res;
 }
-//从数据库中获取数据并把数据转为JSON格式上
+//从数据库中获取数据并把数据转为JSON格式
 void MyDatabaseHandler::TransferDataToJson(std::vector<string> &crashInfo, string appkey)
 {
+	//InitAppkeyTables();
+
 	crashInfo.clear();
 
 	sql::Statement *stmt;

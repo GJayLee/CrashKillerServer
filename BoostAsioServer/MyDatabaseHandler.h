@@ -77,11 +77,12 @@ public:
 
 protected:
 	//外部项目配置信息
-	std::vector<string> tables;
-	std::vector<string> appkeys;
-	std::vector<string> starts;
-	std::vector<string> ends;
-	std::unordered_map<string, string> appkey_tables;
+	static std::vector<string> tables;
+	static std::vector<string> appkeys;
+	static std::vector<string> starts;
+	static std::vector<string> ends;
+	static string projectConfigureInfoInJson;
+	static std::unordered_map<string, string> appkey_tables;
 
 private:
 	//连接数据库

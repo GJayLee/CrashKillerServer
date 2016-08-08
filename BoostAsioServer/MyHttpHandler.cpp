@@ -21,6 +21,14 @@ using boost::asio::ip::tcp;
 const string LIMIT_NUM = "50";
 const int MAX_LIMIT = 50;
 
+//利用默认构造函数初始化静态变量，项目配置信息
+std::vector<string> MyDatabaseHandler::tables;
+std::vector<string> MyDatabaseHandler::appkeys;
+std::vector<string> MyDatabaseHandler::starts;
+std::vector<string> MyDatabaseHandler::ends;
+string MyDatabaseHandler::projectConfigureInfoInJson;
+std::unordered_map<string, string> MyDatabaseHandler::appkey_tables;
+
 MyHttpHandler::MyHttpHandler()
 {
 	//设置Header信息
