@@ -27,6 +27,9 @@
     <ClCompile Include="generic.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="MyDatabaseHandler.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="RWHandler.h">
@@ -36,6 +39,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="generic.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="MyDatabaseHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

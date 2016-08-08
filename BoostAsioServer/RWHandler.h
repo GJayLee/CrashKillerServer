@@ -3,26 +3,15 @@
 #include<iostream>
 #include<unordered_map>
 #include<boost\asio.hpp>
-#include <boost\property_tree\ptree.hpp>
-#include <boost\property_tree\json_parser.hpp>
-#include <boost\serialization\split_member.hpp>
-#include<boost\tokenizer.hpp>
-#include<boost\algorithm\string.hpp>
 
-//连接数据库
-#include<cppconn\driver.h>
-#include<cppconn\exception.h>
-#include <cppconn/resultset.h> 
-#include <cppconn/statement.h>
-#include<mysql_connection.h>
-#include <cppconn/prepared_statement.h>
+#include "MyDatabaseHandler.h"
 
 using namespace boost::asio;
 using namespace boost::property_tree;
 using boost::asio::ip::tcp;
 using std::string;
 
-class RWHandler
+class RWHandler:public MyDatabaseHandler
 {
 public:
 	//构造函数
@@ -49,20 +38,6 @@ public:
 	}
 
 private:
-	//从项目配置文件中获取appkey
-	void InitProjectsTables();
-	
-	//从数据库中获取开发者信息并转换为JSON格式
-	void GetDeveloperInfo();
-	//从数据库中获取数据并把数据转为JSON格式上
-	void TransferDataToJson(string appkey);
-	//从客户端收到更新信息，更新数据库
-	//void UpdateDatabase(string crash_id, string developerId, string fixed);
-	void UpdateDatabase(string clientData);
-	//更新开发者的异常信息时，需要重新对异常进行分类
-	void AutoClassifyCrash(string tableName, string developer);
-	//从数据库中取出数据，未处理，测试
-	void GetDatabaseData();
 	// 异步写操作完成后write_handler触发
 	void write_handler(const boost::system::error_code& ec);
 	//异步读操作完成后read_handler触发
@@ -71,6 +46,20 @@ private:
 	void HandleError(const boost::system::error_code& ec);
 	//每隔10s调用重发
 	void wait_handler();
+
+	////从项目配置文件中获取appkey
+	//void InitProjectsTables();
+	////从数据库中获取开发者信息并转换为JSON格式
+	//string GetDeveloperInfo();
+	////从数据库中获取数据并把数据转为JSON格式上
+	//void TransferDataToJson(string appkey);
+	////从客户端收到更新信息，更新数据库
+	////void UpdateDatabase(string crash_id, string developerId, string fixed);
+	//void UpdateDatabase(string clientData);
+	////更新开发者的异常信息时，需要重新对异常进行分类
+	//void AutoClassifyCrash(string tableName, string developer);
+	////从数据库中取出数据，未处理，测试
+	//void GetDatabaseData();
 
 	//根据传输协议拼接发送消息
 	string GetSendData(string flag, string msg);
@@ -94,19 +83,16 @@ private:
 	std::unordered_map<int, bool> sendIDArray;
 	std::list<int> sendIds;
 
-	//连接数据库
-	sql::Driver *dirver;
-	sql::Connection *con;
 	//从数据库中取出的数据，并以JSON格式存取
-	std::vector<string> dataInJson;
+	std::vector<string> crashInfo;
 	//异常数据的索引ID
 	int dataToSendIndex;
 	//开发者信息，JSON格式
 	string developerInfo;
 
-	std::unordered_map<string, string> appkey_tables;
+	/*std::unordered_map<string, string> appkey_tables;
 	std::vector<string> tables;
-	string projectConfigure;
+	string projectConfigure;*/
 
 	bool initErrorInfo;       //是否发送异常数据
 	bool initDeveloper;       //是否发送开发者信息

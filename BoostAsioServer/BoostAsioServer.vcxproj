@@ -154,11 +154,13 @@
   <ItemGroup>
     <ClCompile Include="generic.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="MyDatabaseHandler.cpp" />
     <ClCompile Include="MyHttpHandler.cpp" />
     <ClCompile Include="RWHandler.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="generic.h" />
+    <ClInclude Include="MyDatabaseHandler.h" />
     <ClInclude Include="MyHttpHandler.h" />
     <ClInclude Include="RWHandler.h" />
   </ItemGroup>
