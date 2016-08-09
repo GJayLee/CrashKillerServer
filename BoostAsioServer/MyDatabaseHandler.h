@@ -28,19 +28,11 @@ public:
 	MyDatabaseHandler();
 	//析构函数
 	~MyDatabaseHandler();
-	
-	//获取外部项目配置文件
-	/*void GetAppkeys(std::vector<string> &res);
-	void GetTables(std::vector<string> &res);
-	void GetStarts(std::vector<string> &res);
-	void GetEnds(std::vector<string> &res);
-	void GetAppkeysTables(std::unordered_map<string, string> &res);*/
 
 	/*
 	服务端和客户端对数据库的操作
 	*/
-	//获取外部配置文件信息，并在数据库中创建对应的表
-	void InitDatabaseTabelByAppkey();
+	
 	//把同一个人的异常信息进行初步的分类
 	void AutoClassifyCrash(string tableName, string developer);
 	//计算两个异常向量间的余弦相似度
@@ -49,18 +41,20 @@ public:
 	/*
 	服务端的数据库操作
 	*/
+	//获取外部配置文件信息，并在数据库中创建对应的表
+	void InitDatabaseTabelByAppkey();
 	//解析从萌友获取的数据，并插入数据库中，如果数据中有该异常的信息，则不再插入
 	//只插入新获取到的异常信息
-	void MyDatabaseHandler::ParseJsonAndInsertToDatabase(int &count, string tableName, string errorList);
+	void ParseJsonAndInsertToDatabase(int &count, string tableName, string errorList);
 	//执行异常分类
-	void MyDatabaseHandler::excuteCrashClassfy(string tableName);
+	void excuteCrashClassfy(string tableName);
 	//执行插入语句，向数据中插入异常数据信息
 	void InsertDataToDataBase(string tableName, const string crash_id
 		, const string fixed, const string app_version, const string first_crash_date_time
 		, const string last_crash_date_time, const string crash_context_digest, const string crash_context);
-	//根据异常信息提取功能模块信息
+	//根据异常信息提取功能模块信息,测试使用
 	void InsertModulesInfo(string crash_context);
-	//根据异常信息提取发现者信息
+	//根据异常信息提取发现者信息，测试使用
 	void InsertDeveloperInfo(string info);
 	//根据异常中堆栈的模块信息智能分配异常，返回分配的开发者名字
 	string AutoDistributeCrash(string crash_context);
@@ -70,7 +64,7 @@ public:
 	*/
 	//从数据库中获取开发者信息并转换为JSON格式
 	void GetDeveloperInfo(string &developerInfo);
-	//从数据库中获取数据并把数据转为JSON格式上
+	//从数据库中获取数据并把数据转为JSON格式
 	void TransferDataToJson(std::vector<string> &crashInfo, string appkey);
 	//从客户端收到更新信息，更新数据库
 	void UpdateDatabase(string clientData);

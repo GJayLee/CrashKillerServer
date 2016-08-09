@@ -26,34 +26,6 @@ MyDatabaseHandler::~MyDatabaseHandler()
 }
 
 /*
-获取外部项目配置文件
-*/
-//void MyDatabaseHandler::GetAppkeys(std::vector<string> &res)
-//{
-//	res.assign(appkeys.begin(), appkeys.end());
-//}
-//void MyDatabaseHandler::GetTables(std::vector<string> &res)
-//{
-//	res.assign(tables.begin(), tables.end());
-//}
-//void MyDatabaseHandler::GetStarts(std::vector<string> &res)
-//{
-//	res.assign(starts.begin(), starts.end());
-//}
-//void MyDatabaseHandler::GetEnds(std::vector<string> &res)
-//{
-//	res.assign(ends.begin(), ends.end());
-//}
-//void MyDatabaseHandler::GetAppkeysTables(std::unordered_map<string, string> &res)
-//{
-//	std::unordered_map<string, string>::iterator iter = appkey_tables.begin();
-//	for (; iter != appkey_tables.end(); ++iter)
-//	{
-//		res[iter->first] = iter->second;
-//	}
-//}
-
-/*
 服务端和客户端对数据库的操作
 */
 //获取外部配置文件信息，并在数据库中创建对应的表
@@ -535,7 +507,7 @@ void MyDatabaseHandler::UpdateDatabase(string clientData)
 	read_json<ptree>(stream, pt);
 	developerId = pt.get<string>("Developer");
 	crash_id = pt.get<string>("CrashId");
-	fixed = pt.get<string>("Solve");
+	fixed = pt.get<string>("HasSolve");
 	appkey = pt.get<string>("Appkey");
 
 	//查找数据库信息
