@@ -5,6 +5,12 @@
         	"tableName": "PC",
             "start_date": "2016-01-01",
             "end_date": "2016-08-01"
+        },
+        {
+        	"appkey": "8e4b010a0d51f6e020ead6ce37bad33896a00f90",
+        	"tableName": "Debug",
+            "start_date": "2016-01-01",
+            "end_date": "2016-08-01"
         }
     ]
 }

@@ -26,8 +26,7 @@ RWHandler::RWHandler(io_service& ios) : m_sock(ios), m_timer(ios)
 	initDeveloper = false;
 
 	isDisConnected = false;
-
-	memset(data, 0, SEND_SIZE);
+	readCount = 0;
 
 	//开启异步等待
 	m_timer.async_wait(boost::bind(&RWHandler::wait_handler, this));
@@ -87,6 +86,7 @@ void RWHandler::HandleWrite()
 	// 发送信息(非阻塞)
 	if (initErrorInfo)
 	{
+		readCount++;
 		string sendStr;
 		GenerateSendData(sendStr, crashInfo[dataToSendIndex]);
 		m_sock.async_write_some(buffer(sendStr, sendStr.size()),
@@ -98,6 +98,7 @@ void RWHandler::HandleWrite()
 	//发送开发者信息
 	if (initDeveloper)
 	{
+		readCount++;
 		string sendStr;
 		GenerateSendData(sendStr, developerInfo);
 		m_sock.async_write_some(buffer(sendStr, sendStr.size()),
@@ -151,7 +152,11 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 	if (ec)
 	{
 		//std::cout << "read" << dataToSendIndex << std::endl;
-		HandleError(ec);
+		if (readCount > 0)
+			readCount--;
+		else
+			HandleError(ec);
+		
 		return;
 	}
 	else
@@ -177,35 +182,37 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 			GenerateSendData(sendStr, projectConfigureInfoInJson);
 			write(m_sock, buffer(sendStr, sendStr.size()), ec);
 			std::cout << "ProjectConfigure finish!" << std::endl;
-
 			HandleRead();
 		}
 		//客户端请求初始化异常数据时调用
 		else if (strcmp(command, INIT_CRASH_INFO) == 0)
 		{
-			boost::system::error_code ec;
-			string sendStr = ETX + (*str)[1];
-			write(m_sock, buffer(sendStr, sendStr.size()), ec);
-			Sleep(500);
-
+			readCount--;
 			initErrorInfo = true;
 			TransferDataToJson(crashInfo, &(*str)[i + 1]);
 			dataToSendIndex = 0;
 			offSet = 0;
+
+			boost::system::error_code ec;
+			string sendStr = ETX + (*str)[1] + "Receive";
+			write(m_sock, buffer(sendStr, sendStr.size()), ec);
+			Sleep(500);
+
 			HandleWrite();
 		}
 		//客户端发送获取开发者信息时
 		else if (strcmp(&(*str)[2], INIT_DEVELOPER_INFO) == 0)
 		{
-			boost::system::error_code ec;
-			string sendStr = ETX + (*str)[1];
-			write(m_sock, buffer(sendStr, sendStr.size()), ec);
-
-			Sleep(500);
-
+			readCount--;
 			initDeveloper = true;
 			GetDeveloperInfo(developerInfo);
 			offSet = 0;
+
+			boost::system::error_code ec;
+			string sendStr = ETX + (*str)[1] + "Receive";
+			write(m_sock, buffer(sendStr, sendStr.size()), ec);
+			Sleep(500);
+
 			HandleWrite();
 		}
 		//收到确认返回时，根据返回执行不同的操作
@@ -270,6 +277,7 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 			boost::system::error_code ec;
 			string sendStr = ETX + (*str)[1];
 			write(m_sock, buffer(sendStr, sendStr.size()), ec);
+			readCount++;
 			HandleRead();
 		}
 		//其他情况
@@ -283,33 +291,53 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 
 void RWHandler::HandleError(const boost::system::error_code& ec)
 {
-	if (!isDisConnected)
+	try
 	{
-		m_timer.cancel();
-		//m_timer.expires_at(boost::posix_time::pos_infin);
-		CloseSocket();
-		std::cout << "断开连接" << m_connId << std::endl;
-		//std::cout << ec.message() << std::endl;
-		if (m_callbackError)
-			m_callbackError(m_connId);
+		if (isDisConnected)
+			return;
+		else
+		{
+			isDisConnected = true;
+			m_timer.cancel();
+			//m_timer.expires_at(boost::posix_time::pos_infin);
+			CloseSocket();
+			std::cout << "断开连接" << m_connId << std::endl;
+			//std::cout << ec.message() << std::endl;
+			if (m_callbackError)
+				m_callbackError(m_connId);
+		}
 	}
-	
-	isDisConnected = true;
+	catch (std::exception e)
+	{
+		std::cout << "HandleError" << std::endl;
+		return;
+	}
 }
 
 //等待10s，如果没收到返回，即isReSend为true则调用重发
 void RWHandler::wait_handler()
-{
-	if (isDisConnected)
-		return;
-
-	if (m_timer.expires_at() <= deadline_timer::traits_type::now()&&isReSend)
+{	
+	try
 	{
-		std::cout << "没有接收到返回，重发消息!" << std::endl;
-		if (m_sock.is_open())
-			HandleWrite();
-		else
-			std::cout << "重发失败，连接已断开！" << std::endl;
+		if (isDisConnected)
+			return;
+
+		if (m_timer.expires_at() <= deadline_timer::traits_type::now() && isReSend)
+		{
+			if (m_sock.is_open())
+			{
+				std::cout << "没有接收到返回，重发消息!" << std::endl;
+				HandleWrite();
+			}
+			else
+				std::cout << "重发失败，连接已断开！" << std::endl;
+		}
+		m_timer.async_wait(boost::bind(&RWHandler::wait_handler, this));
 	}
-	m_timer.async_wait(boost::bind(&RWHandler::wait_handler, this));
+	catch (boost::system::error_code ec)
+	{
+		std::cout << "WaitError" << std::endl;
+		return;
+	}
+	
 }

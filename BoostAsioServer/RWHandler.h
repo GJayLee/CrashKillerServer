@@ -65,8 +65,8 @@ private:
 	int dataToSendIndex;
 	//开发者信息，JSON格式
 	string developerInfo;
-	//发送的数据
-	char data[SEND_SIZE];
+	//异步等待的数
+	int readCount;
 
 	bool initErrorInfo;       //是否发送异常数据
 	bool initDeveloper;       //是否发送开发者信息

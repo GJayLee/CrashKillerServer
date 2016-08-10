@@ -288,7 +288,7 @@ void MyDatabaseHandler::excuteCrashClassfy(string tableName)
 	delete pstmt;
 	delete res;
 }
-//根据异常信息提取功能模块信息
+//根据异常信息提取功能模块信息，测试
 void MyDatabaseHandler::InsertModulesInfo(string crash_context)
 {
 	//字符串匹配Cvte的信息
@@ -312,7 +312,7 @@ void MyDatabaseHandler::InsertModulesInfo(string crash_context)
 		crash_context = m.suffix().str();
 	}
 }
-//根据异常信息提取发现者信息
+//根据异常信息提取发现者信息，测试
 void MyDatabaseHandler::InsertDeveloperInfo(string info)
 {
 	//第一次出现等号的位置
@@ -533,7 +533,7 @@ void MyDatabaseHandler::GetDeveloperInfo(string &developerInfo)
 	write_json(stream, pt);
 	developerInfo = stream.str();
 
-	writeFile(developerInfo, "developInfo.txt");
+	//writeFile(developerInfo, "developInfo.txt");
 
 	delete stmt;
 	delete res;
