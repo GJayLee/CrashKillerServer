@@ -8,8 +8,6 @@
 #include "RWHandler.h"
 #include "generic.h"
 
-const int SEND_SIZE = 65535;
-const int OFFSET = SEND_SIZE - 2;
 //传输协议的头部列表
 const string STX = "\x2";       //正文开始
 const string EOT = "\x4";       //正文结束
@@ -29,6 +27,8 @@ RWHandler::RWHandler(io_service& ios) : m_sock(ios), m_timer(ios)
 
 	isDisConnected = false;
 
+	memset(data, 0, SEND_SIZE);
+
 	//开启异步等待
 	m_timer.async_wait(boost::bind(&RWHandler::wait_handler, this));
 }
@@ -37,22 +37,32 @@ RWHandler::~RWHandler()
 {
 }
 
+/*
+header:
+STX         正文开始
+EOT         正文结束
+ETX         收到
+*/
 //组装拼接发送数据
-void RWHandler::GenerateSendData(char *data, string header, string str)
+void RWHandler::GenerateSendData(char *data, string str)
 {
+	string sendStr;
+	//没有超过最大缓冲区，可以完整发送
 	if (str.size() <= SEND_SIZE)
 	{
-		string sendStr = header + "\x1" + str;
+		sendStr = EOT + "\x1" + str;
 		strcpy(data, sendStr.c_str());
 		for (int i = sendStr.size(); i < SEND_SIZE; i++)
 			data[i] = ' ';
 	}
 	else
 	{
-		if ((offSet + SEND_SIZE) >= str.size())
+		//把数据截断发送
+		if ((offSet + OFFSET) >= str.size())
 		{
+			//添加结束符告诉客户端这是该data的最后一段
 			string tempStr = str.substr(offSet, str.size() - offSet);
-			string sendStr = header + "\x1" + tempStr;
+			sendStr = EOT + "\x1" + tempStr;
 			strcpy(data, sendStr.c_str());
 			for (int i = sendStr.size(); i < SEND_SIZE; i++)
 				data[i] = ' ';
@@ -60,99 +70,10 @@ void RWHandler::GenerateSendData(char *data, string header, string str)
 		else
 		{
 			string tempStr = str.substr(offSet, OFFSET);
-			string sendStr = header + "\x1" + tempStr;
+			sendStr = STX + "\x1" + tempStr;
 			strcpy(data, sendStr.c_str());
 		}
 	}
-
-	if (initErrorInfo)
-	{
-		//没有超过最大缓冲区，可以完整发送
-		if (crashInfo[dataToSendIndex].size() <= SEND_SIZE)
-		{
-			//std::cout << "发送" << dataToSendIndex << std::endl;
-			//添加结束符告诉客户端这是该data的最后一段
-			char data[SEND_SIZE] = { 0 };
-			GenerateSendData(data, EOT, crashInfo[dataToSendIndex]);
-			m_sock.async_write_some(buffer(data, SEND_SIZE),
-				boost::bind(&RWHandler::write_handler, this, placeholders::error));
-			/*string sendStr = EOT + "\x1" + crashInfo[dataToSendIndex];
-			m_sock.async_write_some(buffer(sendStr.c_str(), sendStr.size()),
-			boost::bind(&RWHandler::write_handler, this, placeholders::error));*/
-		}
-		else
-		{
-			//把数据截断发送
-			//添加结束符告诉客户端这是该data的最后一段
-			if ((offSet + SEND_SIZE) >= crashInfo[dataToSendIndex].size())
-			{
-				string tempStr = crashInfo[dataToSendIndex].substr(offSet, crashInfo[dataToSendIndex].size() - offSet);
-				char data[SEND_SIZE] = { 0 };
-				GenerateSendData(data, EOT, tempStr);
-				m_sock.async_write_some(buffer(data, SEND_SIZE),
-					boost::bind(&RWHandler::write_handler, this, placeholders::error));
-				/*string sendStr = EOT + "\x1" + tempStr;
-				m_sock.async_write_some(buffer(sendStr, sendStr.size()),
-				boost::bind(&RWHandler::write_handler, this, placeholders::error));*/
-			}
-			else
-			{
-				string tempStr = crashInfo[dataToSendIndex].substr(offSet, SEND_SIZE);
-				string sendStr = STX + "\x1" + tempStr;
-				m_sock.async_write_some(buffer(sendStr, sendStr.size()),
-					boost::bind(&RWHandler::write_handler, this, placeholders::error));
-			}
-		}
-		//从发送起计算，10s后没接收到返回就重发
-		isReSend = true;
-		m_timer.expires_from_now(boost::posix_time::seconds(10));
-	}
-	//发送开发者信息
-	if (initDeveloper)
-	{
-		//没有超过最大缓冲区，可以完整发送
-		if (developerInfo.size() <= SEND_SIZE)
-		{
-			//添加结束符告诉客户端这是该data的最后一段
-			//string sendStr = GetSendData(EOT, developerInfo);
-			char data[SEND_SIZE] = { 0 };
-			GenerateSendData(data, EOT, developerInfo);
-			m_sock.async_write_some(buffer(data, SEND_SIZE),
-				boost::bind(&RWHandler::write_handler, this, placeholders::error));
-			/*string sendStr = EOT + "\x1" + developerInfo;
-			m_sock.async_write_some(buffer(sendStr.c_str(), sendStr.size()),
-			boost::bind(&RWHandler::write_handler, this, placeholders::error));*/
-		}
-		else
-		{
-			//把数据截断发送
-			//添加结束符告诉客户端这是该data的最后一段
-			if ((offSet + SEND_SIZE) >= developerInfo.size())
-			{
-				string tempStr = developerInfo.substr(offSet, developerInfo.size() - offSet);
-				//string sendStr = GetSendData(EOT, tempStr);
-				char data[SEND_SIZE] = { 0 };
-				GenerateSendData(data, EOT, tempStr);
-				m_sock.async_write_some(buffer(data, SEND_SIZE),
-					boost::bind(&RWHandler::write_handler, this, placeholders::error));
-				/*string sendStr = EOT + "\x1" + tempStr;
-				m_sock.async_write_some(buffer(sendStr, sendStr.size()),
-				boost::bind(&RWHandler::write_handler, this, placeholders::error));*/
-			}
-			else
-			{
-				string tempStr = developerInfo.substr(offSet, SEND_SIZE);
-				//string sendStr = GetSendData(STX, tempStr);
-				string sendStr = STX + "\x1" + tempStr;
-				m_sock.async_write_some(buffer(sendStr, sendStr.size()),
-					boost::bind(&RWHandler::write_handler, this, placeholders::error));
-			}
-		}
-		//从发送起计算，10s后没接收到返回就重发
-		isReSend = true;
-		m_timer.expires_from_now(boost::posix_time::seconds(10));
-	}
-
 }
 
 void RWHandler::HandleRead()
@@ -174,42 +95,10 @@ void RWHandler::HandleWrite()
 	// 发送信息(非阻塞)
 	if (initErrorInfo)
 	{
-		//没有超过最大缓冲区，可以完整发送
-		if (crashInfo[dataToSendIndex].size() <= SEND_SIZE)
-		{
-			//std::cout << "发送" << dataToSendIndex << std::endl;
-			//添加结束符告诉客户端这是该data的最后一段
-			char data[SEND_SIZE] = { 0 };
-			GenerateSendData(data, EOT, crashInfo[dataToSendIndex]);
-			m_sock.async_write_some(buffer(data, SEND_SIZE),
-				boost::bind(&RWHandler::write_handler, this, placeholders::error));
-			/*string sendStr = EOT + "\x1" + crashInfo[dataToSendIndex];
-			m_sock.async_write_some(buffer(sendStr.c_str(), sendStr.size()),
-				boost::bind(&RWHandler::write_handler, this, placeholders::error));*/
-		}
-		else
-		{
-			//把数据截断发送
-			//添加结束符告诉客户端这是该data的最后一段
-			if ((offSet + SEND_SIZE) >= crashInfo[dataToSendIndex].size())
-			{
-				string tempStr = crashInfo[dataToSendIndex].substr(offSet, crashInfo[dataToSendIndex].size() - offSet);
-				char data[SEND_SIZE] = { 0 };
-				GenerateSendData(data, EOT, tempStr);
-				m_sock.async_write_some(buffer(data, SEND_SIZE),
-					boost::bind(&RWHandler::write_handler, this, placeholders::error));
-				/*string sendStr = EOT + "\x1" + tempStr;
-				m_sock.async_write_some(buffer(sendStr, sendStr.size()),
-					boost::bind(&RWHandler::write_handler, this, placeholders::error));*/
-			}
-			else
-			{
-				string tempStr = crashInfo[dataToSendIndex].substr(offSet, SEND_SIZE);
-				string sendStr = STX + "\x1" + tempStr;
-				m_sock.async_write_some(buffer(sendStr, sendStr.size()),
-					boost::bind(&RWHandler::write_handler, this, placeholders::error));
-			}
-		}
+		memset(data, 0, SEND_SIZE);
+		GenerateSendData(data, crashInfo[dataToSendIndex]);
+		m_sock.async_write_some(buffer(data, SEND_SIZE),
+			boost::bind(&RWHandler::write_handler, this, placeholders::error));
 		//从发送起计算，10s后没接收到返回就重发
 		isReSend = true;
 		m_timer.expires_from_now(boost::posix_time::seconds(10));
@@ -217,44 +106,10 @@ void RWHandler::HandleWrite()
 	//发送开发者信息
 	if (initDeveloper)
 	{
-		//没有超过最大缓冲区，可以完整发送
-		if (developerInfo.size() <= SEND_SIZE)
-		{
-			//添加结束符告诉客户端这是该data的最后一段
-			//string sendStr = GetSendData(EOT, developerInfo);
-			char data[SEND_SIZE] = { 0 };
-			GenerateSendData(data, EOT, developerInfo);
-			m_sock.async_write_some(buffer(data, SEND_SIZE),
-				boost::bind(&RWHandler::write_handler, this, placeholders::error));
-			/*string sendStr = EOT + "\x1" + developerInfo;
-			m_sock.async_write_some(buffer(sendStr.c_str(), sendStr.size()),
-				boost::bind(&RWHandler::write_handler, this, placeholders::error));*/
-		}
-		else
-		{
-			//把数据截断发送
-			//添加结束符告诉客户端这是该data的最后一段
-			if ((offSet + SEND_SIZE) >= developerInfo.size())
-			{
-				string tempStr = developerInfo.substr(offSet, developerInfo.size() - offSet);
-				//string sendStr = GetSendData(EOT, tempStr);
-				char data[SEND_SIZE] = { 0 };
-				GenerateSendData(data, EOT, tempStr);
-				m_sock.async_write_some(buffer(data, SEND_SIZE),
-					boost::bind(&RWHandler::write_handler, this, placeholders::error));
-				/*string sendStr = EOT + "\x1" + tempStr;
-				m_sock.async_write_some(buffer(sendStr, sendStr.size()),
-					boost::bind(&RWHandler::write_handler, this, placeholders::error));*/
-			}
-			else
-			{
-				string tempStr = developerInfo.substr(offSet, SEND_SIZE);
-				//string sendStr = GetSendData(STX, tempStr);
-				string sendStr = STX + "\x1" + tempStr;
-				m_sock.async_write_some(buffer(sendStr, sendStr.size()),
-					boost::bind(&RWHandler::write_handler, this, placeholders::error));
-			}
-		}
+		memset(data, 0, SEND_SIZE);
+		GenerateSendData(data, developerInfo);
+		m_sock.async_write_some(buffer(data, SEND_SIZE),
+			boost::bind(&RWHandler::write_handler, this, placeholders::error));
 		//从发送起计算，10s后没接收到返回就重发
 		isReSend = true;
 		m_timer.expires_from_now(boost::posix_time::seconds(10));
@@ -326,19 +181,15 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 			write(m_sock, buffer(sendStr, sendStr.size()), ec);
 			Sleep(500);
 
-			char data[SEND_SIZE] = { 0 };
-			GenerateSendData(data, EOT, projectConfigureInfoInJson);
+			memset(data, 0, SEND_SIZE);
+			GenerateSendData(data, projectConfigureInfoInJson);
 			write(m_sock, buffer(data, SEND_SIZE), ec);
-			//string sendAppkeys = EOT + "\x1" + projectConfigureInfoInJson;
-			//write(m_sock, buffer(sendAppkeys, sendAppkeys.size()), ec);
 			std::cout << "ProjectConfigure finish!" << std::endl;
 
 			HandleRead();
 		}
 		//客户端请求初始化异常数据时调用
-		//else if (strcmp(&(*str)[2], INIT_CRASH_INFO) == 0)
 		else if (strcmp(command, INIT_CRASH_INFO) == 0)
-		//if (strcmp(command, "Get Expect") == 0)
 		{
 			boost::system::error_code ec;
 			string sendStr = ETX + (*str)[1];
@@ -372,8 +223,8 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 			isReSend = false;
 			if (initErrorInfo)
 			{
-				int sendId = (*str)[1] - '0';
-				if ((offSet + SEND_SIZE) > crashInfo[dataToSendIndex].size())
+				//int sendId = (*str)[1] - '0';
+				if ((offSet + OFFSET) > crashInfo[dataToSendIndex].size())
 				{
 					std::cout << dataToSendIndex << "发送完成！" << std::endl;
 					++dataToSendIndex;
@@ -386,37 +237,33 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 					else
 					{
 						boost::system::error_code ec;
-						char data[SEND_SIZE] = { 0 };
-						GenerateSendData(data, EOT, "SendFinish");
+						memset(data, 0, SEND_SIZE);
+						GenerateSendData(data, "SendFinish");
 						write(m_sock, buffer(data, SEND_SIZE), ec);
-						//string sendStr = EOT + "\x1" + "SendFinish";
-						//write(m_sock, buffer(sendStr, sendStr.size()), ec);
 						initErrorInfo = false;
 					}
 				}
 				else
 				{
-					offSet = offSet + SEND_SIZE;
+					offSet = offSet + OFFSET;
 					HandleWrite();
 				}
 			}
 			else if (initDeveloper)
 			{
-				int sendId = (*str)[1] - '0';
-				if ((offSet + SEND_SIZE) > developerInfo.size())
+				//int sendId = (*str)[1] - '0';
+				if ((offSet + OFFSET) > developerInfo.size())
 				{
 					std::cout << "开发者信息发送完成！" << std::endl;
 					boost::system::error_code ec;
-					char data[SEND_SIZE] = { 0 };
-					GenerateSendData(data, EOT, "SendFinish");
+					memset(data, 0, SEND_SIZE);
+					GenerateSendData(data, "SendFinish");
 					write(m_sock, buffer(data, SEND_SIZE), ec);
-					//string sendStr = EOT + "\x1" + "SendFinish";
-					//write(m_sock, buffer(sendStr, sendStr.size()), ec);
 					initDeveloper = false;
 				}
 				else
 				{
-					offSet = offSet + SEND_SIZE;
+					offSet = offSet + OFFSET;
 					HandleWrite();
 				}
 			}
@@ -473,297 +320,3 @@ void RWHandler::wait_handler()
 	}
 	m_timer.async_wait(boost::bind(&RWHandler::wait_handler, this));
 }
-
-////从项目配置文件中获取appkey
-//void RWHandler::InitProjectsTables()
-//{
-//	//读取配置文件中appkey信息
-//	std::ifstream t("ProjectsConfigure.txt");
-//	if (!t)
-//	{
-//		std::cout << "打开项目Appkey配置文件失败！" << std::endl;
-//		return;
-//	}
-//	std::stringstream buffer;
-//	buffer << t.rdbuf();
-//	//初始化项目配置信息
-//	projectConfigure = buffer.str();
-//
-//	ptree pt, pt1, pt2;
-//	read_json<ptree>(buffer, pt);
-//	pt1 = pt.get_child("projects");
-//	for (ptree::iterator it = pt1.begin(); it != pt1.end(); ++it)
-//	{
-//		pt2 = it->second;
-//		appkey_tables[pt2.get<string>("appkey")] = pt2.get<string>("tableName");
-//		tables.push_back(pt2.get<string>("tableName"));
-//	}
-//}
-////从数据库中获取开发者信息并转换为JSON格式
-//void RWHandler::GetDeveloperInfo()
-//{
-//	sql::Statement *stmt;
-//	sql::ResultSet *res;
-//
-//	stmt = con->createStatement();
-//	developerInfo = "";
-//	//从developer表中获取所有信息
-//	res = stmt->executeQuery("select * from developer");
-//	std::stringstream stream;
-//	ptree pt, pt2;
-//	//循环遍历
-//	while (res->next())
-//	{
-//		ptree pt1;
-//		//把取出的信息转换为JSON格式
-//		pt1.put("Id", res->getString("ID"));
-//		pt1.put("Name", res->getString("Name"));
-//		pt2.push_back(make_pair("", pt1));
-//	}
-//
-//	pt.put_child("developer", pt2);
-//	write_json(stream, pt);
-//	developerInfo = stream.str();
-//
-//	writeFile(developerInfo, "developInfo.txt");
-//
-//	delete stmt;
-//	delete res;
-//}
-//
-////从数据库中获取数据并把数据转为JSON格式上, 此处目前因为只有一个appkey
-////该函数应该传入appkey来找到数据库中对于的表，现在有问题
-//void RWHandler::TransferDataToJson(string appkey)
-//{
-//	dataInJson.clear();
-//
-//	sql::Statement *stmt;
-//	sql::ResultSet *res;
-//
-//	//con->setClientOption("characterSetResults", "utf8");
-//	stmt = con->createStatement();
-//
-//	string result = "";
-//	//从数据库表中获取所有信息
-//	string sqlStatement = "select * from " + appkey_tables[appkey] + " where fixed=\"false\"";
-//	res = stmt->executeQuery(sqlStatement);
-//	//ptree pt3, pt4;
-//	//循环遍历
-//	while (res->next())
-//	{
-//		//把取出的信息转换为JSON格式
-//		std::stringstream stream;
-//		ptree pt, pt1, pt2;
-//		pt1.put("crash_id", res->getString("crash_id"));
-//		pt1.put("developer", res->getString("developer"));
-//		pt1.put("fixed", res->getString("fixed"));
-//		pt1.put("crash_type", res->getString("crash_type"));
-//		pt1.put("app_version", res->getString("app_version"));
-//		pt1.put("first_crash_date_time", res->getString("first_crash_date_time"));
-//		pt1.put("last_crash_date_time", res->getString("last_crash_date_time"));
-//		pt1.put("crash_context_digest", res->getString("crash_context_digest"));
-//		pt1.put("crash_context", res->getString("crash_context"));
-//
-//		pt2.push_back(make_pair("", pt1));
-//		//pt3.push_back(make_pair("", pt1));
-//		pt.put_child("data", pt2);
-//		write_json(stream, pt);
-//		dataInJson.push_back(stream.str());
-//	}
-//	//测试
-//	/*pt4.put_child("datas", pt3);
-//	std::stringstream stream;
-//	write_json(stream, pt4);
-//	writeFile(stream.str(), "dataJson.txt");*/
-//
-//	//writeFile(dataInJson, "dataJson.txt");
-//
-//	//清理
-//	delete res;
-//	delete stmt;
-//}
-//
-////从客户端收到更新信息Json格式，解析JSON，更新数据库
-//void RWHandler::UpdateDatabase(string clientData)
-//{
-//	string crash_id, developerId, fixed, appkey;
-//
-//	ptree pt;
-//	std::stringstream stream;
-//	stream << clientData;
-//	read_json<ptree>(stream, pt);
-//	developerId = pt.get<string>("Developer");
-//	crash_id = pt.get<string>("CrashId");
-//	fixed = pt.get<string>("Solve");
-//	appkey = pt.get<string>("Appkey");
-//
-//	//查找数据库信息
-//	sql::PreparedStatement *pstmt;
-//	sql::ResultSet *res;
-//	string sqlStatement;
-//	//把异常分配给开发者
-//	if (developerId != "null")
-//	{
-//		string developer;
-//		sqlStatement = "select Name from developer where ID = \"" + developerId + "\"";
-//		pstmt = con->prepareStatement(sqlStatement);
-//		res = pstmt->executeQuery();
-//		while (res->next())
-//			developer = res->getString("Name");
-//
-//		sql::Statement *stmt;
-//		stmt = con->createStatement();
-//		string sqlStateMent = "UPDATE " + appkey_tables[appkey] +" SET developer = \"" + developer
-//			+ "\",fixed = \"" + fixed + "\" WHERE crash_id = \"" + crash_id + "\"";
-//		stmt->execute(sqlStateMent);
-//
-//		delete stmt;
-//		delete pstmt;
-//		delete res;
-//		//对异常信息进行重新分类
-//		AutoClassifyCrash(appkey_tables[appkey], developer);
-//	}
-//	//异常标记为已解决
-//	else
-//	{
-//		sql::Statement *stmt;
-//		stmt = con->createStatement();
-//		string sqlStateMent = "UPDATE " + appkey_tables[appkey] +" SET fixed = \"" + fixed + "\" WHERE crash_id = \"" + crash_id + "\"";
-//		stmt->execute(sqlStateMent);
-//		delete stmt;
-//	}
-//}
-//
-////更新开发者的异常信息时，需要重新对异常进行分类
-//void RWHandler::AutoClassifyCrash(string tableName, string developer)
-//{
-//	sql::PreparedStatement *pstmt;
-//	string sqlStatement = "select crash_id, crash_context from " + tableName + " where developer = \"" + developer + "\"";
-//	pstmt = con->prepareStatement(sqlStatement);
-//	sql::ResultSet *res;
-//	res = pstmt->executeQuery();
-//
-//	//异常id的集合
-//	std::vector<string> crash_id;
-//	std::unordered_map<string, bool> hasClassy;
-//	//每个异常中有哪些模块
-//	std::unordered_map<string, std::unordered_set<string>> crash_modules;
-//	//该开发者负责哪些模块
-//	std::unordered_set<string> crash_totalModules;
-//
-//	while (res->next())
-//	{
-//		crash_id.push_back(res->getString("crash_id"));
-//		hasClassy[res->getString("crash_id")] = false;
-//		const char *regStr = "Cvte(\\.[0-9a-zA-Z]+){2,9}";
-//		boost::regex reg(regStr);
-//		boost::smatch m;
-//		string crash_context = res->getString("crash_context");
-//		while (boost::regex_search(crash_context, m, reg))
-//		{
-//			boost::smatch::iterator it = m.begin();
-//			crash_totalModules.insert(it->str());
-//			crash_modules[res->getString("crash_id")].insert(it->str());
-//			crash_context = m.suffix().str();
-//		}
-//	}
-//
-//	delete pstmt;
-//	delete res;
-//
-//	//初始化每个异常的模块向量
-//	std::unordered_map<string, std::vector<int>> crash_vectors;
-//	std::unordered_set<string>::iterator iterTotalModules = crash_totalModules.begin();
-//	for (; iterTotalModules != crash_totalModules.end(); ++iterTotalModules)
-//	{
-//		std::unordered_map<string, std::unordered_set<string>>::iterator iter = crash_modules.begin();
-//		for (; iter != crash_modules.end(); ++iter)
-//		{
-//			if (iter->second.find((*iterTotalModules)) == iter->second.end())
-//				crash_vectors[iter->first].push_back(0);
-//			else
-//				crash_vectors[iter->first].push_back(1);
-//		}
-//	}
-//	//异常的类型，根据异常向量的余弦相似度判断它们是否是同一个异常
-//	int type = 0;
-//	std::unordered_map<int, std::vector<string>> crash_types;
-//	std::unordered_map<string, std::vector<int>>::iterator iter = crash_vectors.begin();
-//	for (int i = 0; i < crash_id.size(); i++)
-//	{
-//		if (!hasClassy[crash_id[i]])
-//		{
-//			crash_types[type].push_back(crash_id[i]);
-//			if (crash_vectors.find(crash_id[i]) == crash_vectors.end())
-//				continue;
-//		}
-//
-//		else
-//			continue;
-//		for (int j = i + 1; j < crash_id.size(); j++)
-//		{
-//			if (crash_vectors.find(crash_id[j]) == crash_vectors.end())
-//				continue;
-//			if (CalculateCos(crash_vectors[crash_id[i]], crash_vectors[crash_id[j]]))
-//			{
-//				crash_types[type].push_back(crash_id[j]);
-//				hasClassy[crash_id[j]] = true;
-//			}
-//		}
-//		++type;
-//	}
-//
-//	//遍历异常的类型，并把它插入数据库中
-//	con->setAutoCommit(0);
-//	for (int i = 0; i < type; i++)
-//	{
-//		for (int j = 0; j < crash_types[i].size(); j++)
-//		{
-//			std::stringstream ss;
-//			ss << i;
-//			sqlStatement = "update " + tableName + " set crash_type=\"" + ss.str() + "\" where crash_id = \"" + crash_types[i][j] + "\"";
-//			pstmt = con->prepareStatement(sqlStatement);
-//			pstmt->execute();
-//			delete pstmt;
-//		}
-//	}
-//	con->commit();
-//}
-//
-////从数据库中取出数据，未处理，测试
-//void RWHandler::GetDatabaseData()
-//{
-//	sql::Driver *dirver;
-//	sql::Connection *con;
-//	sql::Statement *stmt;
-//	sql::ResultSet *res;
-//	dirver = get_driver_instance();
-//	//连接数据库
-//	con = dirver->connect("localhost", "root", "123456");
-//	//选择mydata数据库
-//	con->setSchema("CrashKiller");
-//	//con->setClientOption("characterSetResults", "utf8");
-//	stmt = con->createStatement();
-//
-//	string result = "";
-//
-//	//从name_table表中获取所有信息
-//	res = stmt->executeQuery("select * from errorinfo");
-//	//循环遍历
-//	while (res->next())
-//	{
-//		//输出，id，name，age,work,others字段的信息
-//		//cout << res->getString("name") << " | " << res->getInt("age") << endl;
-//		result = result + res->getString("ID") + res->getString("crash_id")
-//			+ res->getString("fixed") + res->getString("app_version")
-//			+ res->getString("first_crash_date_time") + res->getString("crash_context_digest")
-//			+ res->getString("crash_context");
-//	}
-//
-//	//setSendData(result.c_str());
-//
-//	//清理
-//	delete res;
-//	delete stmt;
-//	delete con;
-//}
