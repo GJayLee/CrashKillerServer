@@ -175,7 +175,7 @@ void MyDatabaseHandler::AutoClassifyCrash(string tableName, string developer)
 	}
 	con->commit();
 }
-//计算两个向量间的余弦相似度
+//计算两个向量间的余弦相似度，达到70%的相似则判断为同一类异常
 bool MyDatabaseHandler::CalculateCos(std::vector<int> a, std::vector<int> b)
 {
 	float lengthA = 0, lengthB = 0;
