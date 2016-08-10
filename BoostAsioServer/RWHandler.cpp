@@ -44,16 +44,12 @@ EOT         正文结束
 ETX         收到
 */
 //组装拼接发送数据
-void RWHandler::GenerateSendData(char *data, string str)
+void RWHandler::GenerateSendData(string &sendStr, string str)
 {
-	string sendStr;
 	//没有超过最大缓冲区，可以完整发送
 	if (str.size() <= SEND_SIZE)
 	{
 		sendStr = EOT + "\x1" + str;
-		strcpy(data, sendStr.c_str());
-		for (int i = sendStr.size(); i < SEND_SIZE; i++)
-			data[i] = ' ';
 	}
 	else
 	{
@@ -63,15 +59,11 @@ void RWHandler::GenerateSendData(char *data, string str)
 			//添加结束符告诉客户端这是该data的最后一段
 			string tempStr = str.substr(offSet, str.size() - offSet);
 			sendStr = EOT + "\x1" + tempStr;
-			strcpy(data, sendStr.c_str());
-			for (int i = sendStr.size(); i < SEND_SIZE; i++)
-				data[i] = ' ';
 		}
 		else
 		{
 			string tempStr = str.substr(offSet, OFFSET);
 			sendStr = STX + "\x1" + tempStr;
-			strcpy(data, sendStr.c_str());
 		}
 	}
 }
@@ -95,9 +87,9 @@ void RWHandler::HandleWrite()
 	// 发送信息(非阻塞)
 	if (initErrorInfo)
 	{
-		memset(data, 0, SEND_SIZE);
-		GenerateSendData(data, crashInfo[dataToSendIndex]);
-		m_sock.async_write_some(buffer(data, SEND_SIZE),
+		string sendStr;
+		GenerateSendData(sendStr, crashInfo[dataToSendIndex]);
+		m_sock.async_write_some(buffer(sendStr, sendStr.size()),
 			boost::bind(&RWHandler::write_handler, this, placeholders::error));
 		//从发送起计算，10s后没接收到返回就重发
 		isReSend = true;
@@ -106,9 +98,9 @@ void RWHandler::HandleWrite()
 	//发送开发者信息
 	if (initDeveloper)
 	{
-		memset(data, 0, SEND_SIZE);
-		GenerateSendData(data, developerInfo);
-		m_sock.async_write_some(buffer(data, SEND_SIZE),
+		string sendStr;
+		GenerateSendData(sendStr, developerInfo);
+		m_sock.async_write_some(buffer(sendStr, sendStr.size()),
 			boost::bind(&RWHandler::write_handler, this, placeholders::error));
 		//从发送起计算，10s后没接收到返回就重发
 		isReSend = true;
@@ -181,9 +173,9 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 			write(m_sock, buffer(sendStr, sendStr.size()), ec);
 			Sleep(500);
 
-			memset(data, 0, SEND_SIZE);
-			GenerateSendData(data, projectConfigureInfoInJson);
-			write(m_sock, buffer(data, SEND_SIZE), ec);
+			sendStr = "";
+			GenerateSendData(sendStr, projectConfigureInfoInJson);
+			write(m_sock, buffer(sendStr, sendStr.size()), ec);
 			std::cout << "ProjectConfigure finish!" << std::endl;
 
 			HandleRead();
@@ -219,6 +211,7 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 		//收到确认返回时，根据返回执行不同的操作
 		else if ((*str)[0] == ETX[0])
 		{
+			//std::cout << "接收消息：" << &(*str)[0] << std::endl;
 			//收到返回，设置重发为false
 			isReSend = false;
 			if (initErrorInfo)
@@ -237,9 +230,9 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 					else
 					{
 						boost::system::error_code ec;
-						memset(data, 0, SEND_SIZE);
-						GenerateSendData(data, "SendFinish");
-						write(m_sock, buffer(data, SEND_SIZE), ec);
+						string sendStr;
+						GenerateSendData(sendStr, "SendFinish");
+						write(m_sock, buffer(sendStr, sendStr.size()), ec);
 						initErrorInfo = false;
 					}
 				}
@@ -256,9 +249,9 @@ void RWHandler::read_handler(const boost::system::error_code& ec, boost::shared_
 				{
 					std::cout << "开发者信息发送完成！" << std::endl;
 					boost::system::error_code ec;
-					memset(data, 0, SEND_SIZE);
-					GenerateSendData(data, "SendFinish");
-					write(m_sock, buffer(data, SEND_SIZE), ec);
+					string sendStr;
+					GenerateSendData(sendStr, "SendFinish");
+					write(m_sock, buffer(sendStr, sendStr.size()), ec);
 					initDeveloper = false;
 				}
 				else

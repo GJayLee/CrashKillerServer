@@ -42,7 +42,7 @@ public:
 
 private:
 	//组装拼接发送数据
-	void GenerateSendData(char *data, string str);
+	void GenerateSendData(string &sendStr, string str);
 
 	// 异步写操作完成后write_handler触发
 	void write_handler(const boost::system::error_code& ec);

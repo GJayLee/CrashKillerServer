@@ -349,7 +349,7 @@ void MyDatabaseHandler::InsertDeveloperInfo(string info)
 //根据异常中堆栈的模块信息智能分配异常，返回分配的开发者名字
 string MyDatabaseHandler::AutoDistributeCrash(string crash_context)
 {
-	string developerName = "";
+	/*string developerName = "";
 	string moduleName = "";
 	const char *regStr = "Cvte(\\.[0-9a-zA-Z]+){2}";
 	boost::regex reg(regStr);
@@ -367,7 +367,6 @@ string MyDatabaseHandler::AutoDistributeCrash(string crash_context)
 	{
 		boost::smatch::iterator it = m.begin();
 		moduleName = it->str();
-
 
 		sqlStatement = "select developer_id from moduleinfo where module_name = \"" + moduleName + "\"";
 		//从errorinfo表中获取所有信息
@@ -395,6 +394,101 @@ string MyDatabaseHandler::AutoDistributeCrash(string crash_context)
 			}
 		}
 		crash_context = m.suffix().str();
+	}
+
+	sqlStatement = "select Name from developer where ID = \"" + maxId + "\"";
+	pstmt = con->prepareStatement(sqlStatement);
+	res = pstmt->executeQuery();
+
+	while (res->next())
+		developerName = res->getString("Name");
+
+	delete pstmt;
+	delete res;
+
+	return developerName;*/
+
+	string developerName = "";
+	std::unordered_map<string, int> developerWeight;
+	string maxId = "";
+	int maxWeight = 0;
+	int count = 2;
+
+	//查找数据库信息
+	sql::PreparedStatement *pstmt;
+	sql::ResultSet *res;
+	string sqlStatement;
+
+	std::unordered_map<string, bool> modulesHasExisted;
+	//提取异常数据中的模块信息
+	for (; count <= 4; count++)
+	{
+		string context = crash_context;
+		string moduleName = "";
+		std::stringstream ss;
+		ss << count;
+		string temp = "Cvte(\\.[0-9a-zA-Z]+){" + ss.str() + "}";
+		const char *regStr = temp.c_str();
+		boost::regex reg(regStr);
+		boost::smatch m;
+
+		while (boost::regex_search(context, m, reg))
+		{
+			boost::smatch::iterator it = m.begin();
+			moduleName = it->str();
+			if (modulesHasExisted.find(moduleName) == modulesHasExisted.end())
+			{
+				modulesHasExisted[moduleName] = true;
+				sqlStatement = "select developer_id from moduleinfo where module_name = \"" + moduleName + "\"";
+				pstmt = con->prepareStatement(sqlStatement);
+				res = pstmt->executeQuery();
+
+				string developer_id = "";
+				while (res->next())
+					developer_id = res->getString("developer_id");
+
+				delete pstmt;
+				delete res;
+
+				if (developer_id != "")
+				{
+					if (developerWeight.find(developer_id) == developerWeight.end())
+					{
+						developerWeight[developer_id] = 1;
+						maxId = developer_id;
+					}
+					else
+					{
+						//找出权重最大的开发者，因为一条异常中可能涉及几个模块，每个模块都由不同
+						//开发者实现，一个模块给开发者的权重加1
+						developerWeight[developer_id]++;
+						if (developerWeight[developer_id] > maxWeight)
+						{
+							maxId = developer_id;
+							maxWeight = developerWeight[developer_id];
+						}
+					}
+				}
+			}
+			
+			/*sqlStatement = "select module_name from modules where module_name = \"" + moduleName + "\"";
+			pstmt = con->prepareStatement(sqlStatement);
+			res = pstmt->executeQuery();
+			bool hasExisted = false;
+			while (res->next())
+				hasExisted = true;
+
+			delete pstmt;
+			delete res;*/
+			
+			/*sqlStatement = "insert ignore into modules (module_name) values(?)";
+			pstmt = con->prepareStatement(sqlStatement);
+			pstmt->setString(1, moduleName);
+			pstmt->execute();
+			delete pstmt;*/
+
+			context = m.suffix().str();
+		}
 	}
 
 	sqlStatement = "select Name from developer where ID = \"" + maxId + "\"";
